@@ -1,0 +1,111 @@
+# Builds the WWHD-UWP Arabic Edition APPX on GitHub's Windows runners.
+#
+# Two jobs: the LLVM/Clang UWP bridge (the long pole, built alone) in parallel with the SDL,
+# CPython-UWP, Mesa driver and translation staging; then the runtime is built against all of it
+# and packaged with MakeAppx (unsigned + self-signed). No game assets, keys or derived files are
+# needed: the unified package prepares and compiles the game on the console from the player's own
+# USA disc image. The Arabic translation is fetched from Arabic Hesham's official release and
+# SHA-256-verified by arabic/fetch_patch.py before it is staged into the package.
+#
+# The self-signed APPX installs through the Xbox Device Portal after importing wwhd-uwp-arabic.cer
+# on the console; the unsigned APPX is for re-signing with your own certificate.
+name: UWP package (Arabic Edition)
+
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  LLVM_VERSION: 20.1.8
+  CPYTHON_VERSION: v3.11.17
+  ZLIB_VERSION: 1.3.1
+  ZLIB_TAG: 1.3.1
+  VULKAN_HEADERS_VERSION: v1.3.290
+  GLSLANG_TAG: 15.1.0
+  MESA_UWP_RELEASE: alpha-2
+  MESA_UWP_ASSET: alpha-2.zip
+  UPSTREAM_REF: f10b56621ed13e0053e7cf8190e740834377e45a
+
+jobs:
+  clang:
+    name: LLVM/Clang 20.1.8 UWP bridge
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the bridge
+        shell: pwsh
+        run: .github/scripts/build-clang-uwp.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clang-uwp
+          path: artifacts/clang-uwp
+          retention-days: 7
+
+  package:
+    name: Runtime, Arabic mod and APPX
+    runs-on: windows-latest
+    needs: clang
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Fetch and verify the Arabic translation, stage the bundled mod
+        shell: pwsh
+        run: |
+          python arabic/fetch_patch.py --out build/arabic
+          python arabic/stage_mod.py --zip build/arabic/Arabic.Hesham.Zelda.WW.zip --out .local/arabic/staged
+          Copy-Item .local/arabic/staged/content.arabic_hesham .local/arabic/content.arabic_hesham -Recurse
+          python arabic/verify_pack.py .local/arabic/content.arabic_hesham/content/Common/Pack/permanent_2d_UsEnglish.pack
+
+      - name: Download the pinned upstream ZeldaWWHDRecomp tooling
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://codeload.github.com/ZeldaWWHDRecomp/ZeldaWWHDRecomp/tar.gz/$env:UPSTREAM_REF" -OutFile upstream.tar.gz
+          tar -xzf upstream.tar.gz
+          Move-Item "ZeldaWWHDRecomp-$($env:UPSTREAM_REF.Substring(0, 12))" upstream
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Move-Item upstream/tools artifacts/upstream-tools
+          Get-ChildItem artifacts/upstream-tools | Select-Object Name
+
+      - name: Build SDL3 UWP
+        shell: pwsh
+        run: .github/scripts/build-sdl-uwp.ps1
+
+      - name: Build CPython UWP
+        shell: pwsh
+        run: .github/scripts/build-python-uwp.ps1
+
+      - name: Fetch the Mesa Dozen UWP driver
+        shell: pwsh
+        run: .github/scripts/fetch-mesa-uwp.ps1
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: clang-uwp
+          path: artifacts/clang-uwp
+
+      - name: Build the runtime and package the APPX
+        shell: pwsh
+        run: .github/scripts/build-package.ps1
+
+      - name: Report the on-console preparation path
+        shell: pwsh
+        run: |
+          Write-Host "Arabic mod files in the package:"
+          Get-ChildItem package/BundledMods -Recurse -File | ForEach-Object { Write-Host "  $($_.FullName.Substring($PWD.Path.Length + 8)) ($($_.Length) bytes)" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wwhd-uwp-arabic-appx
+          path: |
+            wwhd-uwp-arabic.appx
+            wwhd-uwp-arabic-unsigned.appx
+            wwhd-uwp-arabic.pfx
+            wwhd-uwp-arabic.cer
+          retention-days: 14
+          if-no-files-found: error

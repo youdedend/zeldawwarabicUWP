@@ -115,6 +115,18 @@ not modified.
 
 ## 5. Building the package
 
+**On GitHub (recommended):** the `UWP package (Arabic Edition)` workflow
+(`.github/workflows/uwp-package.yml`) builds the complete APPX on GitHub's Windows runners from
+public sources — no local Windows machine, game image or keys required. It fetches and verifies
+the Arabic translation, builds the SDL3-UWP, CPython-UWP and LLVM/Clang-UWP components, fetches
+the Mesa Dozen driver, builds the runtime (dynamic game code + unified on-console preparation),
+stages the bundled Arabic mod, and publishes both an unsigned APPX (sign it with your own
+certificate) and a self-signed APPX with its `.pfx`/`.cer` for direct Xbox Device Portal installs
+(import the `.cer` on the console first). The game itself is translated and compiled on the
+console from your own USA disc image at first launch, exactly as the upstream release does.
+
+**On a PC** (the same steps the workflow runs, for local builds):
+
 1. Build the UWP app as upstream does (Windows, Clang for UWP; see the root `README.md`).
 2. Stage the translation once:
    `python3 arabic/fetch_patch.py && python3 arabic/stage_mod.py --zip build/arabic/Arabic.Hesham.Zelda.WW.zip --out .local/arabic/staged`

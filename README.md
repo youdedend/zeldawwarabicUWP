@@ -34,6 +34,8 @@ python3 arabic/stage_mod.py --zip build/arabic/Arabic.Hesham.Zelda.WW.zip --out 
 
 Install the APPX through Xbox Device Portal and set the application to **Game** in Dev Home.
 
+**Build it on GitHub:** the `UWP package (Arabic Edition)` workflow produces the complete APPX (unsigned + self-signed, with its `.cer`) from public sources — run it from the Actions tab (`workflow_dispatch`) and download the artifact. No game image or keys are needed at build time; the game is translated and compiled on the console from your own USA disc at first launch.
+
 Keep your original USA WUX/WUD, matching disc `.key` and `common.key` together on USB. Allow at least 3 GiB of additional free space. Choose **Browse USB**, select the image and keep the drive connected during preparation and gameplay. Later, choose **Play game**.
 
 You must own the original game; this repository contains no game images, keys or game-derived assets, and the Arabic translation is downloaded from its author's own release.
