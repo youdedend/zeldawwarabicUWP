@@ -40,8 +40,13 @@ foreach ($c in 'llvm', 'clang', 'cmake', 'third-party') {
 }
 
 Write-Host '== Applying the UWP patch (platforms/uwp-clang/patches) =='
+# Windows checkouts are CRLF (the runner image's global core.autocrlf): normalize the patch to LF
+# so it matches the LLVM tarball sources, then apply from the monorepo root.
+$patchText = [System.IO.File]::ReadAllText((Join-Path $root 'platforms\uwp-clang\patches\llvm-20.1.8-uwp.patch')) -replace "`r`n", "`n"
+$patchFile = Join-Path $env:RUNNER_TEMP 'llvm-uwp.patch'
+[System.IO.File]::WriteAllText($patchFile, $patchText)
 Push-Location $src
-git apply --whitespace=nowarn (Join-Path $root 'platforms\uwp-clang\patches\llvm-20.1.8-uwp.patch')
+git apply --ignore-whitespace --whitespace=nowarn $patchFile
 if ($LASTEXITCODE -ne 0) { throw 'llvm-20.1.8-uwp.patch did not apply cleanly' }
 Pop-Location
 
