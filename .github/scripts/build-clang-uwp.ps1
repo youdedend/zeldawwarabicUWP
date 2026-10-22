@@ -18,12 +18,15 @@ $src = Join-Path $root 'llvm-project'
 $out = Join-Path $root 'artifacts\clang-uwp'
 
 Write-Host "== Downloading LLVM $llvmVersion component sources =="
+New-Item -ItemType Directory -Force -Path $src | Out-Null
 foreach ($c in 'llvm', 'clang', 'cmake', 'third-party') {
     $file = "$c-$llvmVersion.src.tar.xz"
-    if (-not (Test-Path $file)) {
-        Invoke-WebRequest "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvmVersion/$file" -OutFile $file
-    }
     if (-not (Test-Path (Join-Path $src $c))) {
+        if (-not (Test-Path $file)) {
+            Write-Host "downloading $file"
+            Invoke-WebRequest "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvmVersion/$file" -OutFile $file
+        }
+        Write-Host "extracting $file"
         tar -xJf $file
         Move-Item "$c-$llvmVersion.src" (Join-Path $src $c)
     }
