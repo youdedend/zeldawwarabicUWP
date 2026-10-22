@@ -115,15 +115,24 @@ not modified.
 
 ## 5. Building the package
 
-**On GitHub (recommended):** the `UWP package (Arabic Edition)` workflow
-(`.github/workflows/uwp-package.yml`) builds the complete APPX on GitHub's Windows runners from
-public sources — no local Windows machine, game image or keys required. It fetches and verifies
-the Arabic translation, builds the SDL3-UWP, CPython-UWP and LLVM/Clang-UWP components, fetches
-the Mesa Dozen driver, builds the runtime (dynamic game code + unified on-console preparation),
-stages the bundled Arabic mod, and publishes both an unsigned APPX (sign it with your own
-certificate) and a self-signed APPX with its `.pfx`/`.cer` for direct Xbox Device Portal installs
-(import the `.cer` on the console first). The game itself is translated and compiled on the
-console from your own USA disc image at first launch, exactly as the upstream release does.
+**On GitHub (recommended):** two workflows build the package for you, no local Windows machine,
+game image or keys required:
+
+- **Fast lane — `Fast package (from upstream release)`** (`fast-package.yml`, ~5 minutes): takes
+  JYRS20's released `wwhd-uwp` ZIP (the packaged app), injects exactly what the Arabic
+  integration adds — the `prepare_game.py` with the Windfall door riddle bypass, and the
+  SHA-256-verified Arabic translation as a bundled content mod — then repacks and self-signs it
+  (`wwhd-uwp-arabic-fast.appx` + `.cer`/`.pfx` artifacts). It also runs `arabic/verify_pack.py`
+  against the real translation and prints the font's Arabic counts and the runtime's RTL
+  activation verdict into the build log. On the released v0.1.2 runtime, enable the mod once in
+  **Settings → Mods** (auto-install/auto-enable needs this repo's rebuilt runtime, below);
+  right-to-left text then activates on its own when the pack's font maps the Arabic alphabet.
+- **Full lane — `UWP package (Arabic Edition)`** (`uwp-package.yml`): builds every component from
+  public sources — SDL3-UWP, CPython-UWP, the LLVM/Clang 20.1.8 bridge (cached after the first
+  run), the Mesa Dozen driver, and this repo's runtime with the Arabic auto-install and
+  RTL-force changes — and packages the same Arabic mod. The game itself is translated and
+  compiled on the console from your own USA disc image at first launch, exactly as the upstream
+  release does.
 
 **On a PC** (the same steps the workflow runs, for local builds):
 
