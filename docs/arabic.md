@@ -126,6 +126,8 @@ not modified.
    Xbox Device Portal and set the app to **Game** in Dev Home.
 4. Optional checks on a PC:
    `python3 arabic/verify_pack.py <staged pack>` and `python3 arabic/tests/run_tests.py`.
+   The same checks (plus the RTL engine's own test and compile checks of the changed runtime
+   sources) run on GitHub on every push: `.github/workflows/arabic-checks.yml`.
 
 ## 6. What runs where
 

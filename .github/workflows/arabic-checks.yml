@@ -1,0 +1,42 @@
+# Offline verification for the Arabic Hesham integration (docs/arabic.md).
+#
+# These checks run on Linux because they need no game assets, keys or the Windows/UWP toolchain:
+# the RTL text engine's own test, the Arabic pipeline's test suite, compile checks of the changed
+# runtime sources, and the syntax of the preparation script. Building the APPX itself stays on
+# Windows with Clang for UWP (see docs/arabic.md, "Building the package").
+name: Arabic integration checks
+
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y g++
+
+      - name: RTL text engine (shaping, bidi, line order)
+        run: |
+          g++ -std=c++20 -I runtime/src -o /tmp/rtl_text_test runtime/tools/rtl_text_test.cpp runtime/src/rtl_text.cpp
+          /tmp/rtl_text_test
+
+      - name: Runtime sources touched by the integration compile
+        run: |
+          g++ -std=c++20 -fsyntax-only -I runtime/src -I runtime/include -I runtime/guest/include runtime/src/rtl_text_hooks.cpp
+          g++ -std=c++20 -fsyntax-only -I runtime/src -I runtime/include runtime/src/mods/packages.cpp
+
+      - name: Arabic integration test suite (patch, pack parsers, staging, metadata)
+        run: python3 arabic/tests/run_tests.py
+
+      - name: Preparation script syntax (Windfall door patch carrier)
+        run: python3 -m py_compile platforms/uwp-game/prepare_game.py arabic/fetch_patch.py arabic/stage_mod.py arabic/verify_pack.py
