@@ -9,6 +9,13 @@
 # so every DLL found here ships in the package root. mesa-uwp's releases are built for UWP/Xbox;
 # the exact pin is recorded in the log for traceability.
 $ErrorActionPreference = 'Stop'
+
+# Surface terminating errors as workflow annotations (visible through the API).
+trap {
+	Write-Host ("::error::FAILED: " + $_.Exception.Message)
+	if ($_.InvocationInfo) { Write-Host ("::error::at: " + $_.InvocationInfo.PositionMessage.Trim()) }
+	break
+}
 $ProgressPreference = 'SilentlyContinue'
 
 $root = $PWD.Path

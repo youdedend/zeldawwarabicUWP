@@ -10,6 +10,13 @@
 # the Clang/LLVM libraries the embedded frontend needs (clangCodeGen, clangFrontend, native
 # codegen) and no clang.exe.
 $ErrorActionPreference = 'Stop'
+
+# Surface terminating errors as workflow annotations (visible through the API).
+trap {
+	Write-Host ("::error::FAILED: " + $_.Exception.Message)
+	if ($_.InvocationInfo) { Write-Host ("::error::at: " + $_.InvocationInfo.PositionMessage.Trim()) }
+	break
+}
 $ProgressPreference = 'SilentlyContinue'
 
 $llvmVersion = $env:LLVM_VERSION

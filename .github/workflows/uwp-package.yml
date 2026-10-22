@@ -34,6 +34,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set up the MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Build the bridge
         shell: pwsh
         run: .github/scripts/build-clang-uwp.ps1
@@ -71,6 +74,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           Move-Item upstream/tools artifacts/upstream-tools
           Get-ChildItem artifacts/upstream-tools | Select-Object Name
+
+      - name: Set up the MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build SDL3 UWP
         shell: pwsh

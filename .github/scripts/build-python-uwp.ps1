@@ -4,6 +4,13 @@
 # Layout produced in artifacts/python-uwp/ (what WWHD_PYTHON_BUILD and the package expect):
 #   wwhd-python.dll, python311.lib (its import library), wwhd-python-host.lib, python311.zip
 $ErrorActionPreference = 'Stop'
+
+# Surface terminating errors as workflow annotations (visible through the API).
+trap {
+	Write-Host ("::error::FAILED: " + $_.Exception.Message)
+	if ($_.InvocationInfo) { Write-Host ("::error::at: " + $_.InvocationInfo.PositionMessage.Trim()) }
+	break
+}
 $ProgressPreference = 'SilentlyContinue'
 
 $root = $PWD.Path

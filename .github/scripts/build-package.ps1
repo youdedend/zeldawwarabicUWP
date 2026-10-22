@@ -11,6 +11,13 @@
 #   vulkan-headers\include\
 #   upstream-tools\               (ZeldaWWHDRecomp tools/ at the pinned upstream commit)
 $ErrorActionPreference = 'Stop'
+
+# Surface terminating errors as workflow annotations (visible through the API).
+trap {
+	Write-Host ("::error::FAILED: " + $_.Exception.Message)
+	if ($_.InvocationInfo) { Write-Host ("::error::at: " + $_.InvocationInfo.PositionMessage.Trim()) }
+	break
+}
 $ProgressPreference = 'SilentlyContinue'
 
 $root = $PWD.Path

@@ -3,6 +3,13 @@
 # Layout produced in artifacts/sdl-uwp/ (what WWHD_SDL_BUILD and WWHD_SDL_SOURCE expect):
 #   SDL3.lib, SDL3.dll, include/   (the include/ tree of the patched SDL source)
 $ErrorActionPreference = 'Stop'
+
+# Surface terminating errors as workflow annotations (visible through the API).
+trap {
+	Write-Host ("::error::FAILED: " + $_.Exception.Message)
+	if ($_.InvocationInfo) { Write-Host ("::error::at: " + $_.InvocationInfo.PositionMessage.Trim()) }
+	break
+}
 $ProgressPreference = 'SilentlyContinue'
 
 $root = $PWD.Path
