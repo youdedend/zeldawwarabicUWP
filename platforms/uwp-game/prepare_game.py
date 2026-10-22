@@ -37,15 +37,19 @@ def apply_arabic_native(compiler):
     Cemu patch targets, so the edited addresses are exactly his; the containing function is
     reported for the log (his .asm patch works the same way, on addresses alone). The edited
     addresses stay inside their own functions, so the function layout is unchanged."""
-    program = compiler.p
+    program = getattr(compiler, 'p', None)
+    if program is None or not hasattr(program, 'words') or not getattr(program.text, 'data', None):
+        raise ValueError('Arabic native patch: this recomp tool does not expose the analyzed program '
+                         '(Recompiler.p.words / p.text.data); it is too old for the door patch')
     words = list(program.words)
     data = bytearray(program.text.data)
     for addr, word, expected_func, what in ARABIC_NATIVE_PATCHES:
         i = (addr - program.text_lo) >> 2
         if i < 0 or i >= len(words):
             raise ValueError('Arabic native patch: 0x%08X is outside the game code' % addr)
-        start = compiler.func_of(addr)
-        if start != expected_func:
+        func_of = getattr(compiler, 'func_of', None)
+        start = func_of(addr) if func_of else None
+        if start is not None and start != expected_func:
             print('WARNING arabic-native: 0x%08X sits in 0x%08X, expected 0x%08X (%s); '
                   'the image is pinned, so the edit is applied at the address as Cemu does'
                   % (addr, start if start is not None else 0, expected_func, what))

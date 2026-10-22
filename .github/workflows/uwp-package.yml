@@ -17,6 +17,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: uwp-package-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   LLVM_VERSION: 20.1.8
   CPYTHON_VERSION: v3.11.17
