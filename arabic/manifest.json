@@ -1,0 +1,12 @@
+{
+  "format_version": 1,
+  "id": "content.arabic_hesham",
+  "name": "Arabic Hesham (موقظ الرياح)",
+  "version": "1.0.0",
+  "author": "Hesham Localization (Arabic Hesham)",
+  "game_id": "wwhd",
+  "kind": "content",
+  "minimum_manager_version": "1.5.0",
+  "content_dir": "content",
+  "description": "Full Arabic translation and native font support by Hesham Localization. Replaces the game's 2D language pack (dialogue, UI strings, Arabic bitmap font) and the title screen. Right-to-left text, Arabic shaping and the Windfall pirate door riddle bypass are provided by the runtime. Requires restart."
+}

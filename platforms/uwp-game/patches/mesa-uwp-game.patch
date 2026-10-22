@@ -1,0 +1,150 @@
+--- a/meson.build
++++ b/meson.build
+@@ -930,7 +930,7 @@
+   pre_args += '-DALLOW_KCMP'
+ endif
+
+-prog_python = import('python').find_installation('python3')
++prog_python = import('python').find_installation()
+ has_mako = run_command(
+   prog_python, '-c',
+   '''
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -701,3 +701,6 @@
+   value : 'disabled',
+   description: 'Enable Intel Xe KMD support.'
+ )
++
++# Local probe repair: root meson.build reads this missing fork option.
++option('uwp', type: 'boolean', value: true, description: 'UWP probe build')
+--- a/src/microsoft/compiler/dxil_validator.cpp
++++ b/src/microsoft/compiler/dxil_validator.cpp
+@@ -100,10 +100,12 @@
+    if (FAILED(version_info->GetVersion(&major, &minor)))
+       return NO_DXIL_VALIDATION;
+
++   // Local probe: this compiler emits PSV2, so target DXIL validation 1.7.
++   // Validation/signing still uses the real installed validator.
+    if (major == 1)
+-      return (enum dxil_validator_version)(DXIL_VALIDATOR_1_0 + MIN2(minor, 8));
++      return (enum dxil_validator_version)(DXIL_VALIDATOR_1_0 + MIN2(minor, 7));
+    if (major > 1)
+-      return DXIL_VALIDATOR_1_8;
++      return DXIL_VALIDATOR_1_7;
+    return NO_DXIL_VALIDATION;
+ }
+
+--- a/src/microsoft/vulkan/dzn_device.c
++++ b/src/microsoft/vulkan/dzn_device.c
+@@ -1327,8 +1327,11 @@
+          base_props->optimalTilingFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
+
+       if (dfmt_info.Support1 & D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL) {
+-         base_props->optimalTilingFeatures |=
+-            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT;
++         base_props->optimalTilingFeatures |= VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
++         // Stencil blits use an SV_StencilRef pixel shader. Do not advertise
++         // them on hardware that cannot execute that optional shader output.
++         if (!vk_format_has_stencil(format) || pdev->options.PSSpecifiedStencilRefSupported)
++            base_props->optimalTilingFeatures |= VK_FORMAT_FEATURE_BLIT_DST_BIT;
+       }
+    }
+
+--- a/src/vulkan/wsi/wsi_common_win32.cpp
++++ b/src/vulkan/wsi/wsi_common_win32.cpp
+@@ -84,6 +84,10 @@
+
+ struct wsi_win32_surface {
+    VkIcdSurfaceWin32 base;
++#ifdef _XBOX_UWP
++   /* Private WWHD bridge: an owned ICoreWindow IUnknown, never an HWND. */
++   IUnknown *core_window;
++#endif
+
+    /* The first time a swapchain is created against this surface, a DComp
+     * target/visual will be created for it and that swapchain will be bound.
+@@ -148,6 +152,30 @@
+    return VK_SUCCESS;
+ }
+
++#ifdef _XBOX_UWP
++/* Private ABI, deliberately separate from vkCreateWin32SurfaceKHR's HWND contract.
++ * Caller passes CoreWindow's IUnknown and keeps all calls on the window thread.
++ */
++extern "C" __declspec(dllexport) VkResult VKAPI_CALL
++wwhd_dzn_create_core_window_surface(VkInstance _instance, IUnknown *window,
++                                    const VkAllocationCallbacks *alloc,
++                                    VkSurfaceKHR *out)
++{
++   if (!_instance || !window || !out)
++      return VK_ERROR_INITIALIZATION_FAILED;
++   VK_FROM_HANDLE(vk_instance, instance, _instance);
++   auto *surface = (wsi_win32_surface *)vk_zalloc2(&instance->alloc, alloc,
++      sizeof(wsi_win32_surface), 8, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
++   if (!surface)
++      return VK_ERROR_OUT_OF_HOST_MEMORY;
++   surface->base.base.platform = VK_ICD_WSI_PLATFORM_WIN32;
++   surface->core_window = window;
++   window->AddRef();
++   *out = VkIcdSurfaceBase_to_handle(&surface->base.base);
++   return VK_SUCCESS;
++}
++#endif
++
+ void
+ wsi_win32_surface_destroy(VkIcdSurfaceBase *icd_surface, VkInstance _instance,
+                           const VkAllocationCallbacks *pAllocator)
+@@ -159,6 +187,11 @@
+       surface->visual->Release();
+    if (surface->target)
+       surface->target->Release();
++#endif
++#ifdef _XBOX_UWP
++   auto *surface = (wsi_win32_surface *)icd_surface;
++   if (surface->core_window)
++      surface->core_window->Release();
+ #endif
+    vk_free2(&instance->alloc, pAllocator, icd_surface);
+ }
+@@ -206,6 +239,10 @@
+       (uint32_t)win_rect.right - (uint32_t)win_rect.left,
+       (uint32_t)win_rect.bottom - (uint32_t)win_rect.top
+    };
++#ifdef _XBOX_UWP
++   if (((wsi_win32_surface *)surf)->core_window)
++      caps->currentExtent = { UINT32_MAX, UINT32_MAX }; /* Application chooses pixels. */
++#endif
+    caps->minImageExtent = { 1u, 1u };
+    caps->maxImageExtent = {
+       wsi_device->maxImageDimension2D,
+@@ -795,11 +832,26 @@
+       desc.BufferUsage |= DXGI_USAGE_RENDER_TARGET_OUTPUT;
+
+    IDXGISwapChain1 *swapchain1;
+-   if (FAILED(factory->CreateSwapChainForComposition(queue, &desc, NULL, &swapchain1)) ||
+-       FAILED(swapchain1->QueryInterface(&chain->dxgi)))
++   HRESULT create_result;
++#ifdef _XBOX_UWP
++   if (surface->core_window) {
++      if (desc.Stereo)
++         return VK_ERROR_FEATURE_NOT_PRESENT;
++      desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
++      desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
++      create_result = factory->CreateSwapChainForCoreWindow(queue, surface->core_window,
++                                                           &desc, NULL, &swapchain1);
++   } else
++#endif
++      create_result = factory->CreateSwapChainForComposition(queue, &desc, NULL, &swapchain1);
++   if (FAILED(create_result)) {
++      fprintf(stderr, "WWHD CoreWindow swapchain create failed hr=%08lx size=%ux%u buffers=%u usage=%u flags=%u thread=%lu\n", (unsigned long)create_result, desc.Width, desc.Height, desc.BufferCount, desc.BufferUsage, desc.Flags, GetCurrentThreadId());
+       return VK_ERROR_INITIALIZATION_FAILED;
+-
++   }
++   HRESULT query_result = swapchain1->QueryInterface(&chain->dxgi);
+    swapchain1->Release();
++   if (FAILED(query_result))
++      return VK_ERROR_INITIALIZATION_FAILED;
+ #if !defined _XBOX_UWP
+    if (!surface->target &&
+        FAILED(wsi->dxgi.dcomp->CreateTargetForHwnd(surface->base.hwnd, false, &surface->target)))
