@@ -66,6 +66,10 @@ exe=$(find build/game -name wwhd-uwp-game.exe | head -1)
 rm -rf package
 mkdir -p package
 cp "$exe" package/
+# The dynamic gamecode path compiles/links through the LLVM bridge: without this DLL
+# the app fails at startup, before any UI.
+[ -f artifacts/clang-uwp/bin/wwhd-clang-bridge.dll ] || { echo 'FATAL: the clang bridge DLL is missing from artifacts (check the bridge job)'; exit 1; }
+cp artifacts/clang-uwp/bin/wwhd-clang-bridge.dll package/
 cp artifacts/sdl-uwp/SDL3.dll package/
 cp artifacts/python-uwp/wwhd-python.dll package/
 cp artifacts/python-uwp/python311.zip package/
