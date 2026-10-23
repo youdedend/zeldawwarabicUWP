@@ -116,8 +116,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: cpython-deepfreeze
-          path: "cpython-${CPYTHON_VERSION#v}/Python/deepfreeze/deepfreeze.c"
+          path: cpython-3.11.17/Python/deepfreeze/deepfreeze.c
           retention-days: 90
+          if-no-files-found: error
 
   package:
     name: Runtime, Arabic mod and APPX
