@@ -7,8 +7,24 @@
 set -euo pipefail
 root=$PWD
 trace=$(mktemp)
+exec 3>&1 4>&2   # keep the real stdout for the exit trap (annotations must reach the log)
 exec >"$trace" 2>&1
-trap 'status=$?; cat "$trace"; if [ $status -ne 0 ]; then tail -n 45 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[package] /"; fi' EXIT
+
+# The CMake build tree embeds absolute compiler paths: wipe it when the toolchain changed
+# (a restored cache from another runner image would fail with dead paths).
+fresh_build() {  # fresh_build <build-dir>
+    local dir="$1" stamp="$VCINSTALLDIR|$VCToolsInstallDir"
+    if [ -f "$dir/.toolchain" ] && [ "$(cat "$dir/.toolchain")" = "$stamp" ]; then
+        echo "toolchain unchanged: incremental build in $dir"
+    else
+        echo "toolchain changed (or first build): wiping $dir"
+        rm -rf "$dir"
+        mkdir -p "$dir"
+        printf '%s' "$stamp" > "$dir/.toolchain"
+    fi
+}
+
+trap 'status=$?; exec 1>&3 2>&4; cat "$trace"; if [ $status -ne 0 ]; then tail -n 50 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[package] /"; fi' EXIT
 
 art=$root/artifacts
 art_win=$(cygpath -m "$art")          # D:/... mixed mode: CMake- and MSYS-safe
@@ -32,6 +48,7 @@ echo '== Building the runtime (dynamic game code, unified preparation, Ninja + c
 clang_cl=$(command -v clang-cl || echo '/c/Program Files/LLVM/bin/clang-cl.exe')
 if [ -f "$(cygpath -u "$clang_cl" 2>/dev/null || echo "$clang_cl")" ]; then clang_cl=$(cygpath -m "$clang_cl"); else clang_cl='C:/Program Files/LLVM/bin/clang-cl.exe'; fi
 echo "clang-cl: $clang_cl"
+fresh_build "$root/build/game"
 cmake -S "$(cygpath -m "$root/platforms/uwp-game")" -B "$(cygpath -m "$root/build/game")" -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER="$clang_cl" -DCMAKE_CXX_COMPILER="$clang_cl" \
     -DCMAKE_SYSTEM_NAME=WindowsStore -DCMAKE_SYSTEM_VERSION=10.0 \

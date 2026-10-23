@@ -4,8 +4,24 @@
 set -euo pipefail
 root=$PWD
 trace=$(mktemp)
+exec 3>&1 4>&2   # keep the real stdout for the exit trap (annotations must reach the log)
 exec >"$trace" 2>&1
-trap 'status=$?; cat "$trace"; if [ $status -ne 0 ]; then tail -n 45 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[python] /"; fi' EXIT
+
+# The CMake build tree embeds absolute compiler paths: wipe it when the toolchain changed
+# (a restored cache from another runner image would fail with dead paths).
+fresh_build() {  # fresh_build <build-dir>
+    local dir="$1" stamp="$VCINSTALLDIR|$VCToolsInstallDir"
+    if [ -f "$dir/.toolchain" ] && [ "$(cat "$dir/.toolchain")" = "$stamp" ]; then
+        echo "toolchain unchanged: incremental build in $dir"
+    else
+        echo "toolchain changed (or first build): wiping $dir"
+        rm -rf "$dir"
+        mkdir -p "$dir"
+        printf '%s' "$stamp" > "$dir/.toolchain"
+    fi
+}
+
+trap 'status=$?; exec 1>&3 2>&4; cat "$trace"; if [ $status -ne 0 ]; then tail -n 50 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[python] /"; fi' EXIT
 
 CPYTHON_VERSION=v3.11.17
 ZLIB_VERSION=1.3.1
@@ -31,6 +47,7 @@ if [ -n "${DEEPFREEZE_C:-}" ] && [ -f "$DEEPFREEZE_C" ]; then
 fi
 
 echo '== Building wwhd-python (UWP) =='
+fresh_build "$root/build/python"
 cmake -S "$(cygpath -m "$PWD/platforms/uwp-python")" -B "$(cygpath -m "$root/build/python")" -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DWWHD_PYTHON_SOURCE="$(cygpath -m "$PWD/deps-cpython")" -DWWHD_ZLIB_SOURCE="$(cygpath -m "$PWD/deps-zlib")"
 cmake --build "$(cygpath -m "$root/build/python")" --target wwhd-python wwhd-python-host
