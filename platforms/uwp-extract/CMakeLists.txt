@@ -6,7 +6,7 @@ target_compile_features(wwhd-extract-embedded PUBLIC cxx_std_17)
 target_compile_definitions(wwhd-extract-embedded PRIVATE WWHD_EXTRACT_EMBEDDED NOMINMAX)
 if(CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
  target_compile_definitions(wwhd-extract-embedded PRIVATE WWHD_EXTRACT_UWP WINAPI_FAMILY=WINAPI_FAMILY_APP _CRT_APP)
- target_link_libraries(wwhd-extract-embedded PUBLIC WindowsApp)
+ target_link_libraries(wwhd-extract-embedded PUBLIC WindowsApp bcrypt)
 endif()
 
 option(WWHD_EXTRACT_BUILD_TESTS "Build host-only tests using upstream synthetic fixtures" OFF)
