@@ -52,7 +52,7 @@ fresh_build "$root/build/game"
 cmake -S "$(cygpath -m "$root/platforms/uwp-game")" -B "$(cygpath -m "$root/build/game")" -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER="$clang_cl" -DCMAKE_CXX_COMPILER="$clang_cl" \
     -DCMAKE_SYSTEM_NAME=WindowsStore -DCMAKE_SYSTEM_VERSION=10.0 \
-    -DWWHD_SDL_SOURCE="$art_win/sdl-src" \
+    -DWWHD_SDL_SOURCE="$art_win/sdl-uwp" \
     -DWWHD_SDL_BUILD="$art_win/sdl-uwp" \
     -DWWHD_VULKAN_HEADERS="$art_win/vulkan-headers/include" \
     -DWWHD_PYTHON_BUILD="$art_win/python-uwp" \
