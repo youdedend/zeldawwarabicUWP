@@ -4,33 +4,24 @@ WWHD-UWP **Arabic Edition** — The Wind Waker HD with Hesham's Arabic translati
 
 | File | What it is |
 |---|---|
-| `wwhd-uwp-arabic-full.appx` | **Recommended.** Self-contained recompiled runtime: the Arabic mod is **bundled and enabled automatically**, the RTL text engine switches on by itself, and the Windfall pirate-door riddle bypass is built in. |
-| `wwhd-uwp-arabic.appx` | Light build on the released WWHD-UWP v0.1.2 runtime with the Arabic files and the door bypass injected. The mod must be enabled once manually (below). |
-| `Arabic-Hesham-mod.zip` | The translation as a standalone mod folder (for any WWHD-UWP install). |
-| `*.pfx` / `*.cer` | The self-signing certificate (CN=WWHDRecompDevelopment, PFX password `wwhd-uwp-arabic`). |
+| `wwhd-uwp-arabic.appx` | The game, ready to play, with the Arabic translation **inside**. Install/update this one. App version **0.1.3.0**. |
+| `Arabic-Hesham-mod.zip` | Optional: the same translation as a standalone mod (for other WWHD-UWP installs). |
+| `wwhd-uwp-arabic.cer` / `.pfx` | The self-signing certificate (CN=WWHDRecompDevelopment, PFX password `wwhd-uwp-arabic`). |
 
-## Install (Windows)
+## Install / update (Xbox Dev Mode)
 
-1. Install `wwhd-uwp-arabic.cer` into *Trusted People* of the Local Machine certificate store.
-2. Double-click the `.appx` (or `Add-AppxPackage .\wwhd-uwp-arabic.appx`).
+1. Device Portal → *Apps → Install app package* (or *File explorer* → Trusted People for `wwhd-uwp-arabic.cer` first, if this is the first install).
+2. Deploy `wwhd-uwp-arabic.appx`. Updating over an existing install (same app, version 0.1.3.0) **keeps your save data and prepared game**.
+3. Dev Home → set the app's **App type to Game**.
 
-## Install (Xbox Dev Mode)
+## Getting the Arabic translation (v0.1.3.0)
 
-1. Open the Device Portal in a browser (*Home → Remote Access* or the IP shown in Dev Home).
-2. *Apps → Install certificate* (or *File explorer* → install `wwhd-uwp-arabic.cer` to Trusted People).
-3. Deploy the `.appx` under *Apps → Install app package*.
+Arabic is **baked in during game preparation** — no mod installation, no file picker:
 
-## Enabling the Arabic translation
-
-- **`wwhd-uwp-arabic-full.appx`: nothing to do** — the mod ships inside and activates itself (right-to-left text included).
-- **`wwhd-uwp-arabic.appx` / standalone mod:**
-  1. Download `Arabic-Hesham-mod.zip` and extract it — you get a `content.arabic_hesham` folder.
-  2. In-game: *Settings → Mods → More → Mods folder* (this opens the game's mods folder).
-  3. Copy `content.arabic_hesham` into that folder, restart the game.
-  4. *Settings → Mods* — select the mod and enable it.
-
-The RTL text engine activates automatically once the Arabic mod is active (the font check is built into the runtime of the full package).
+1. USB stick: your USA Wind Waker HD image (WUX/WUD) + `common.key` + the matching disc `.key`.
+2. Launch the game → preparation screen → *Browse USB* → select your image → **Prepare** (one-time: extract, translate, compile; keep the drive connected).
+3. When it finishes, choose **Play** — the game runs with the full Arabic translation, right-to-left text (activates automatically) and the Windfall pirate-door riddle bypass.
 
 ## Source code
 
-The `Source code (zip)` / `Source code (tar.gz)` links are the complete tree for these packages: runtime RTL edits, the bundled-mod loader, the door-riddle bypass, mod tooling and all build workflows.
+The `Source code (zip)` / `Source code (tar.gz)` links are the complete tree: the runtime RTL engine, the bundled Arabic integration, the UWP CPython/SDL/LLVM build system, the mod tooling and all workflows.

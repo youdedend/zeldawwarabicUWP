@@ -240,28 +240,3 @@ jobs:
             wwhd-uwp-arabic.cer
           retention-days: 14
           if-no-files-found: error
-
-  publish-release:
-    name: Publish the full package to Releases
-    runs-on: ubuntu-latest
-    needs: package
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: wwhd-uwp-arabic-appx
-          path: assets
-
-      - name: Attach the self-contained package to the release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: arabic-v0.1.0
-          RELEASE_TITLE: WWHD-UWP Arabic Edition v0.1.0
-          NOTES_FILE: .github/release-notes-arabic.md
-          ASSETS_DIR: assets
-          RENAME_FROM: wwhd-uwp-arabic.appx wwhd-uwp-arabic.pfx wwhd-uwp-arabic.cer
-          RENAME_TO: wwhd-uwp-arabic-full.appx wwhd-uwp-arabic-full.pfx wwhd-uwp-arabic-full.cer
-        run: bash .github/scripts/publish-release.sh wwhd-uwp-arabic-full.appx wwhd-uwp-arabic-full.pfx wwhd-uwp-arabic-full.cer
