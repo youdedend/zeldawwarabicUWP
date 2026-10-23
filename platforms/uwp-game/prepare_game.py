@@ -99,3 +99,49 @@ if compiler.build.name != 'USA' or len(compiler.sorted_entries) != 39713 or len(
     raise ValueError('Translation does not match the supported runtime profile.')
 print('PASS translation: USA, 39713 functions, 78 source units')
 print('PASS arabic: Windfall pirate door riddle bypass (Hesham patch_arabic_native) applied')
+
+# ---- Arabic Hesham overlay (stage_mod.py Method B, baked into the prepared tree) ----
+# The package carries the translation under BundledMods/content.arabic_hesham; baking it
+# here means no in-game mod installation is needed at all (the Xbox file picker inside the
+# game is unreliable). Baked files also survive every later launch of this preparation.
+def apply_arabic_overlay():
+    home = os.path.dirname(wwhd_tools)
+    source = os.path.join(home, 'BundledMods', 'content.arabic_hesham', 'content')
+    game_root = os.path.dirname(os.path.dirname(wwhd_rpx))  # wwhd_rpx = <game>/code/cking.rpx
+    if not os.path.isdir(source):
+        print('WARNING arabic-overlay: no BundledMods/content.arabic_hesham in the package; skipping')
+        return
+    if not os.path.isdir(os.path.join(game_root, 'content')):
+        print('WARNING arabic-overlay: %s has no content folder; skipping' % game_root)
+        return
+    copied = 0
+    for base, _dirs, files in os.walk(source):
+        for name in files:
+            if name.lower().endswith(('.asm', '.txt', '.md')):
+                continue
+            src = os.path.join(base, name)
+            relative = os.path.relpath(src, source)
+            dst = os.path.join(game_root, 'content', relative)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            with open(src, 'rb') as f_in, open(dst, 'wb') as f_out:
+                f_out.write(f_in.read())
+            copied += 1
+            print('  arabic-overlay %s (%d bytes)' % (relative.replace(os.sep, '/'), os.path.getsize(dst)))
+    if not copied:
+        print('WARNING arabic-overlay: nothing copied; the staged mod is empty')
+        return
+    pack = os.path.join(game_root, 'content', 'Common', 'Pack', 'permanent_2d_UsEnglish.pack')
+    src_pack = os.path.join(source, 'Common', 'Pack', 'permanent_2d_UsEnglish.pack')
+    if os.path.isfile(pack) and os.path.isfile(src_pack):
+        with open(pack, 'rb') as f:
+            baked = hashlib.sha256(f.read()).hexdigest()
+        with open(src_pack, 'rb') as f:
+            staged = hashlib.sha256(f.read()).hexdigest()
+        if baked == staged:
+            print('PASS arabic-overlay: %d files baked, language pack verified (%s)' % (copied, baked[:12]))
+        else:
+            print('WARNING arabic-overlay: language pack hash mismatch after the copy')
+    else:
+        print('PASS arabic-overlay: %d files baked' % copied)
+
+apply_arabic_overlay()

@@ -101,7 +101,12 @@ jobs:
           $manifest = Get-Content package\AppxManifest.xml -Raw
           $manifest = $manifest -replace '<DisplayName>[^<]*</DisplayName>', '<DisplayName>The Legend Of Zelda Wind Waker</DisplayName>'
           $manifest = $manifest -replace 'DisplayName="[^"]*"', 'DisplayName="The Legend Of Zelda Wind Waker"'
+          # Each release bumps the version so the Device Portal update keeps the app's
+          # LocalState (save data, prepared game profiles) instead of needing an uninstall.
+          $manifest = $manifest -replace '(<Identity[^>]*Version=")[^"]*(")', '${1}0.1.3.0${2}'
           Set-Content package\AppxManifest.xml $manifest -Encoding UTF8
+          Write-Host '== Manifest identity =='
+          ($manifest | Select-String '<Identity[^>]*/>').Matches.Value
           Write-Host '== Injected files =='
           Get-Item package\prepare_game.py, package\BundledMods\content.arabic_hesham\manifest.json | Select-Object FullName, Length
           Get-ChildItem package\BundledMods -Recurse -File | ForEach-Object { Write-Host "  $($_.FullName.Substring($PWD.Path.Length + 8)) ($($_.Length) bytes)" }
