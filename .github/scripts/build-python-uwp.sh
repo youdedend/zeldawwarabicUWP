@@ -38,6 +38,19 @@ if [ ! -d deps-zlib ]; then
     mv "zlib-$ZLIB_VERSION" deps-zlib
 fi
 
+# Upstream's UWP support patch (WWHD_UWP guards over getpath.c, posixmodule, _io, ...):
+# idempotent — apply once; if it no longer applies it is already in place (reverse-check).
+UWP_PATCH="$root/platforms/uwp-python/patches/cpython-3.11.17-uwp.patch"
+if git -C deps-cpython apply --check "$UWP_PATCH" 2>/dev/null; then
+    git -C deps-cpython apply "$UWP_PATCH"
+    echo "applied cpython-3.11.17-uwp.patch"
+elif git -C deps-cpython apply --reverse --check "$UWP_PATCH" 2>/dev/null; then
+    echo "cpython-3.11.17-uwp.patch already applied"
+else
+    echo "FATAL: the UWP patch neither applies nor reverses on this CPython tree" >&2
+    exit 1
+fi
+
 # deepfreeze.c is generated during a CPython build and absent from the source tarball; the
 # workflow builds it on Linux (host-independent C) and hands it over via DEEPFREEZE_C.
 if [ -n "${DEEPFREEZE_C:-}" ] && [ -f "$DEEPFREEZE_C" ]; then
