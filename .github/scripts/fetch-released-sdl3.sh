@@ -20,7 +20,8 @@ pwsh -NoProfile -Command "Expand-Archive -Path released.zip -DestinationPath rel
   || powershell -NoProfile -Command "Expand-Archive -Path released.zip -DestinationPath released -Force"
 
 # The released zip wraps the package in an .appx (itself a zip): extract that too.
-inner=$(find released -iname "*.appx" | head -1)
+# There is also a Dependency/VCLibs appx next to it - take the LARGEST (the game).
+inner=$(find released -iname "*.appx" -printf "%s %p\n" | sort -rn | head -1 | cut -d' ' -f2-)
 if [ -n "$inner" ]; then
     echo "inner package: $inner"
     cp "$inner" inner.zip
