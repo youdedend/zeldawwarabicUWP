@@ -116,7 +116,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: cpython-deepfreeze
-          path: cpython-3.11.17/Python/deepfreeze/deepfreeze.c
+          path: |
+            cpython-3.11.17/Python/deepfreeze/deepfreeze.c
+            cpython-3.11.17/Python/frozen_modules/getpath.h
           retention-days: 90
           if-no-files-found: error
 
@@ -185,6 +187,7 @@ jobs:
         shell: bash
         env:
           DEEPFREEZE_C: ${{ github.workspace }}/artifacts/cpython-deepfreeze/deepfreeze.c
+          GETPATH_H: ${{ github.workspace }}/artifacts/cpython-deepfreeze/getpath.h
         run: bash .github/scripts/build-python-uwp.sh
 
       - name: Fetch the Mesa Dozen UWP driver

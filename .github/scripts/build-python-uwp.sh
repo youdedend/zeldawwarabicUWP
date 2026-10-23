@@ -62,6 +62,12 @@ if [ -n "${DEEPFREEZE_C:-}" ] && [ -f "$DEEPFREEZE_C" ]; then
     cp "$DEEPFREEZE_C" deps-cpython/Python/deepfreeze/deepfreeze.c
     echo "deepfreeze.c installed ($(stat -c %s deps-cpython/Python/deepfreeze/deepfreeze.c) bytes)"
 fi
+# getpath.h (generated frozen bytecode for getpath.py) is included by Modules/getpath.c.
+if [ -n "${GETPATH_H:-}" ] && [ -f "$GETPATH_H" ]; then
+    mkdir -p deps-cpython/Python/frozen_modules
+    cp "$GETPATH_H" deps-cpython/Python/frozen_modules/getpath.h
+    echo "getpath.h installed ($(stat -c %s deps-cpython/Python/frozen_modules/getpath.h) bytes)"
+fi
 
 echo '== Building wwhd-python (UWP) =='
 fresh_build "$root/build/python"
