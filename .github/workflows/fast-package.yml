@@ -137,12 +137,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: wwhd-uwp-arabic-fast-appx
           path: assets
-
-      - uses: actions/checkout@v4
 
       - name: Create or refresh the release with the package attached
         shell: bash
