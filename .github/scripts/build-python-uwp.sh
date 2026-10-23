@@ -22,6 +22,14 @@ if [ ! -d deps-zlib ]; then
     mv "zlib-$ZLIB_VERSION" deps-zlib
 fi
 
+# deepfreeze.c is generated during a CPython build and absent from the source tarball; the
+# workflow builds it on Linux (host-independent C) and hands it over via DEEPFREEZE_C.
+if [ -n "${DEEPFREEZE_C:-}" ] && [ -f "$DEEPFREEZE_C" ]; then
+    mkdir -p deps-cpython/Python/deepfreeze
+    cp "$DEEPFREEZE_C" deps-cpython/Python/deepfreeze/deepfreeze.c
+    echo "deepfreeze.c installed ($(stat -c %s deps-cpython/Python/deepfreeze/deepfreeze.c) bytes)"
+fi
+
 echo '== Building wwhd-python (UWP) =='
 cmake -S "$(cygpath -m "$PWD/platforms/uwp-python")" -B "$(cygpath -m "$root/build/python")" -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DWWHD_PYTHON_SOURCE="$(cygpath -m "$PWD/deps-cpython")" -DWWHD_ZLIB_SOURCE="$(cygpath -m "$PWD/deps-zlib")"

@@ -100,10 +100,29 @@ jobs:
           path: artifacts/clang-uwp
           retention-days: 90
 
+  deepfreeze:
+    name: CPython deepfreeze.c (generated)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate CPython's deepfreeze.c (host-independent C; the Windows tree lacks it)
+        run: |
+          set -e
+          curl -sL -o cpython.tar.gz "https://codeload.github.com/python/cpython/tar.gz/refs/tags/${CPYTHON_VERSION}"
+          tar -xzf cpython.tar.gz
+          cd "cpython-${CPYTHON_VERSION#v}"
+          ./configure > /dev/null
+          make -j2 > /dev/null
+          ls -la Python/deepfreeze/deepfreeze.c
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpython-deepfreeze
+          path: "cpython-${CPYTHON_VERSION#v}/Python/deepfreeze/deepfreeze.c"
+          retention-days: 90
+
   package:
     name: Runtime, Arabic mod and APPX
     runs-on: windows-latest
-    needs: clang
+    needs: [clang, deepfreeze]
     steps:
       - uses: actions/checkout@v4
 
@@ -156,8 +175,14 @@ jobs:
             build/python
           key: cpython-uwp-v1-${{ github.run_id }}
           restore-keys: cpython-uwp-v1-
+      - uses: actions/download-artifact@v4
+        with:
+          name: cpython-deepfreeze
+          path: artifacts/cpython-deepfreeze
       - name: Build CPython UWP
         shell: bash
+        env:
+          DEEPFREEZE_C: ${{ github.workspace }}/artifacts/cpython-deepfreeze/deepfreeze.c
         run: bash .github/scripts/build-python-uwp.sh
 
       - name: Fetch the Mesa Dozen UWP driver
