@@ -152,8 +152,10 @@ jobs:
           Move-Item upstream/tools artifacts/upstream-tools
           Get-ChildItem artifacts/upstream-tools | Select-Object Name
 
-      - name: Set up the MSVC developer environment
+      - name: Set up the MSVC developer environment (VS 2022: CPython 3.11 predates VS 18)
         uses: ilammy/msvc-dev-cmd@v1
+        with:
+          vsversion: 17
 
       - name: Cache the SDL3 UWP build (incremental)
         uses: actions/cache@v4

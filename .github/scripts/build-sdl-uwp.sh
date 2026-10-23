@@ -4,8 +4,8 @@
 set -euo pipefail
 root=$PWD
 trace=$(mktemp)
-exec > >(tee "$trace") 2>&1
-trap 'status=$?; if [ $status -ne 0 ]; then tail -n 30 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[sdl] /"; fi' EXIT
+exec >"$trace" 2>&1
+trap 'status=$?; cat "$trace"; if [ $status -ne 0 ]; then tail -n 40 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[sdl] /"; fi' EXIT
 
 echo '== Cloning SDL3_UWP =='
 if [ ! -d sdl-src ]; then

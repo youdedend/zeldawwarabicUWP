@@ -7,8 +7,8 @@
 set -euo pipefail
 root=$PWD
 trace=$(mktemp)
-exec > >(tee "$trace") 2>&1
-trap 'status=$?; if [ $status -ne 0 ]; then tail -n 40 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[package] /"; fi' EXIT
+exec >"$trace" 2>&1
+trap 'status=$?; cat "$trace"; if [ $status -ne 0 ]; then tail -n 45 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[package] /"; fi' EXIT
 
 art=$root/artifacts
 art_win=$(cygpath -m "$art")          # D:/... mixed mode: CMake- and MSYS-safe

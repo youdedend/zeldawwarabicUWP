@@ -4,8 +4,8 @@
 set -euo pipefail
 root=$PWD
 trace=$(mktemp)
-exec > >(tee "$trace") 2>&1
-trap 'status=$?; if [ $status -ne 0 ]; then tail -n 30 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[python] /"; fi' EXIT
+exec >"$trace" 2>&1
+trap 'status=$?; cat "$trace"; if [ $status -ne 0 ]; then tail -n 45 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[python] /"; fi' EXIT
 
 CPYTHON_VERSION=v3.11.17
 ZLIB_VERSION=1.3.1
