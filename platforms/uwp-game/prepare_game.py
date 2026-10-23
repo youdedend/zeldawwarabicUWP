@@ -66,19 +66,25 @@ def verify_arabic_native(outdir):
     """The translated source carries each original instruction in a comment: require both edits."""
     wanted = ['%08X: %08X' % (addr, word) for addr, word, _, _ in ARABIC_NATIVE_PATCHES]
     found = {marker: False for marker in wanted}
-    for name in os.listdir(outdir):
+    patched = []
+    for name in sorted(os.listdir(outdir)):
         if not (name.startswith('code_') and name.endswith('.c')):
             continue
+        hits = 0
         with open(os.path.join(outdir, name), encoding='utf-8', errors='replace') as f:
             for line in f:
                 for marker in wanted:
                     if marker in line:
                         found[marker] = True
+                        hits += 1
+        if hits:
+            patched.append(name[:-2] + '.obj')  # code_XXX.c -> code_XXX.obj
     missing = [marker for marker, ok in found.items() if not ok]
     if missing:
         raise ValueError('Arabic native patch missing from the translated game: ' + ', '.join('0x' + m for m in missing))
     for marker in wanted:
         print('PASS arabic-native: 0x%s in the translated game' % marker)
+    return patched
 
 compiler = recomp.Recompiler(wwhd_rpx, mod_hooks=True)
 apply_arabic_native(compiler)
@@ -93,12 +99,23 @@ try:
     compiler.run(wwhd_work, 30000)
 finally:
     builtins.open = original_open
-verify_arabic_native(wwhd_work)
+patched_units = verify_arabic_native(wwhd_work)
 units = [name for name in os.listdir(wwhd_work) if name.startswith('code_') and name.endswith('.c')]
 if compiler.build.name != 'USA' or len(compiler.sorted_entries) != 39713 or len(units) != 78:
     raise ValueError('Translation does not match the supported runtime profile.')
 print('PASS translation: USA, 39713 functions, 78 source units')
 print('PASS arabic: Windfall pirate door riddle bypass (Hesham patch_arabic_native) applied')
+
+# Mark the units the Arabic patch changed: their compiled objects differ from the vanilla
+# object profile by design. The runtime exempts exactly these (and only when this package's
+# preparation profile is active); every other object stays hash-pinned.
+objects_dir = os.path.join(wwhd_work, 'objects')
+os.makedirs(objects_dir, exist_ok=True)
+marker_path = os.path.join(objects_dir, 'patched-units.txt')
+with open(marker_path, 'w', encoding='utf-8') as f:
+    for unit in sorted(patched_units):
+        f.write(unit + '\n')
+print('PASS arabic: patched units marked for the object profile: %s' % ', '.join(sorted(patched_units)))
 
 # ---- Arabic Hesham overlay (stage_mod.py Method B, baked into the prepared tree) ----
 # The package carries the translation under BundledMods/content.arabic_hesham; baking it

@@ -4,17 +4,17 @@ WWHD-UWP **Arabic Edition** — The Wind Waker HD with Hesham's Arabic translati
 
 | File | What it is |
 |---|---|
-| `wwhd-uwp-arabic.appx` | The game, ready to play, with the Arabic translation **inside**. Install/update this one. App version **0.1.3.0**. |
+| `wwhd-uwp-arabic.appx` | The game, ready to play, with the Arabic translation **inside**. Install/update this one. App version **0.1.4.0**. |
 | `Arabic-Hesham-mod.zip` | Optional: the same translation as a standalone mod (for other WWHD-UWP installs). |
 | `wwhd-uwp-arabic.cer` / `.pfx` | The self-signing certificate (CN=WWHDRecompDevelopment, PFX password `wwhd-uwp-arabic`). |
 
 ## Install / update (Xbox Dev Mode)
 
 1. Device Portal → *Apps → Install app package* (or *File explorer* → Trusted People for `wwhd-uwp-arabic.cer` first, if this is the first install).
-2. Deploy `wwhd-uwp-arabic.appx`. Updating over an existing install (same app, version 0.1.3.0) **keeps your save data and prepared game**.
+2. Deploy `wwhd-uwp-arabic.appx`. Updating over an existing install (same app, version 0.1.4.0) **keeps your save data and prepared game**.
 3. Dev Home → set the app's **App type to Game**.
 
-## Getting the Arabic translation (v0.1.3.0)
+## Getting the Arabic translation (v0.1.4.0)
 
 Arabic is **baked in during game preparation** — no mod installation, no file picker:
 

@@ -12,6 +12,7 @@
 #include <deque>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -87,11 +88,27 @@ void dynamic_game_load(const std::wstring& objects,const std::wstring& rpx){
  std::map<std::string,std::string> expected;std::string digest,name;
  while(profile>>digest>>name){if(digest.size()!=64||!expected.emplace(name,digest).second)throw std::runtime_error("Invalid packaged object profile");}
  if(expected.size()!=80)throw std::runtime_error("Incomplete packaged object profile");
+ // The Arabic Edition's preparation patches the Windfall door riddle out of the game code
+ // before translation, so the affected units' objects differ from the vanilla profile by
+ // design. Preparation writes exactly those unit names to patched-units.txt beside the
+ // objects; they are exempt here - and only when this package's own preparation profile
+ // is active. Every other object stays hash-pinned, as does the RPX itself.
+ std::set<std::string> exempt;
+ {std::ifstream profile_marker(fs::path(home.c_str())/L"preparation-profile.txt");std::string marker;
+  if(profile_marker&&std::getline(profile_marker,marker)&&marker=="arabic-unified-1"){
+   std::ifstream units_file(fs::path(objects)/L"patched-units.txt");std::string unit;
+   while(units_file&&std::getline(units_file,unit)){
+    if(!unit.empty()&&unit.back()=='\r')unit.pop_back();
+    if(unit.size()==12&&unit.compare(0,5,"code_")==0&&unit.compare(8,4,".obj")==0)exempt.insert(unit);
+   }
+  }}
  std::vector<std::string> inputs;inputs.reserve(80);
  for(unsigned i=0;i<80;i++){
   char unit[32];if(i<78)std::snprintf(unit,sizeof unit,"code_%03u.obj",i);else std::snprintf(unit,sizeof unit,"%s",i==78?"table.obj":"imports.obj");
   auto bytes=read(fs::path(objects)/unit);auto found=expected.find(unit);
-  if(found==expected.end()||sha256(bytes)!=found->second)throw std::runtime_error(std::string("USB object differs from the verified compiler profile: ")+unit);
+  if((found==expected.end()||sha256(bytes)!=found->second)&&!exempt.count(unit))
+   throw std::runtime_error(std::string("USB object differs from the verified compiler profile: ")+unit);
+  if(exempt.count(unit))LOG("[dynamic] %s is a patched Arabic unit (exempt from the vanilla profile)",unit);
   inputs.push_back(std::move(bytes));
  }
  LOG("[dynamic] PASS RPX and all 80 object checksums; no game code linked into the app");
