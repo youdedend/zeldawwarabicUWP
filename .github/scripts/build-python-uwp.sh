@@ -40,16 +40,20 @@ fi
 
 # Upstream's UWP support patch (WWHD_UWP guards over getpath.c, posixmodule, _io, ...):
 # idempotent — apply once; if it no longer applies it is already in place (reverse-check).
+# The Windows checkout can deliver the patch with CRLF line endings: normalize like the SDL patches.
 UWP_PATCH="$root/platforms/uwp-python/patches/cpython-3.11.17-uwp.patch"
-if git -C deps-cpython apply --check "$UWP_PATCH" 2>/dev/null; then
-    git -C deps-cpython apply "$UWP_PATCH"
+uwp_patch_lf="$root/uwp-patch-lf.tmp"
+tr -d '\r' < "$UWP_PATCH" > "$uwp_patch_lf"
+if git -C deps-cpython apply --check "$uwp_patch_lf" 2>/dev/null; then
+    git -C deps-cpython apply "$uwp_patch_lf"
     echo "applied cpython-3.11.17-uwp.patch"
-elif git -C deps-cpython apply --reverse --check "$UWP_PATCH" 2>/dev/null; then
+elif git -C deps-cpython apply --reverse --check "$uwp_patch_lf" 2>/dev/null; then
     echo "cpython-3.11.17-uwp.patch already applied"
 else
     echo "FATAL: the UWP patch neither applies nor reverses on this CPython tree" >&2
     exit 1
 fi
+rm -f "$uwp_patch_lf"
 
 # deepfreeze.c is generated during a CPython build and absent from the source tarball; the
 # workflow builds it on Linux (host-independent C) and hands it over via DEEPFREEZE_C.
