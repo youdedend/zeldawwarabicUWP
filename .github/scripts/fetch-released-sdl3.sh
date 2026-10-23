@@ -19,25 +19,28 @@ rm -rf released
 pwsh -NoProfile -Command "Expand-Archive -Path released.zip -DestinationPath released -Force" 2>/dev/null \
   || powershell -NoProfile -Command "Expand-Archive -Path released.zip -DestinationPath released -Force"
 
-# The released zip wraps the package in an .appx (itself a zip): extract that too.
-# There is also a Dependency/VCLibs appx next to it - take the LARGEST (the game).
-inner=$(find released -iname "*.appx" -printf "%s %p\n" | sort -rn | head -1 | cut -d' ' -f2-)
-if [ -n "$inner" ]; then
-    echo "inner package: $inner"
-    cp "$inner" inner.zip
-    pwsh -NoProfile -Command "Expand-Archive -Path inner.zip -DestinationPath released/inner -Force" 2>/dev/null \
-      || powershell -NoProfile -Command "Expand-Archive -Path inner.zip -DestinationPath released/inner -Force"
-fi
+# The released zip wraps the app in an .appx (itself a zip) and ships the VCLibs
+# runtime as a second appx under Dependency/: extract EVERY appx, since the game
+# package holds SDL3.dll and the VCLibs package holds the *_app.dll runtime files.
+i=0
+for appx in $(find released -iname "*.appx"); do
+    i=$((i + 1))
+    echo "extracting $appx"
+    cp "$appx" "inner-$i.zip"
+    pwsh -NoProfile -Command "Expand-Archive -Path 'inner-$i.zip' -DestinationPath 'released/appx-$i' -Force" 2>/dev/null \
+      || powershell -NoProfile -Command "Expand-Archive -Path 'inner-$i.zip' -DestinationPath 'released/appx-$i' -Force"
+done
 
 dll=$(find released -iname "SDL3.dll" | head -1)
 [ -n "$dll" ] || { echo 'FATAL: the released package has no SDL3.dll' >&2; find released -name "*.dll" | head; exit 1; }
 mkdir -p artifacts/jyrs
 cp "$dll" artifacts/jyrs/SDL3.dll
-# Also stash the bundled VC runtime *_app DLLs: the package must carry them itself
-# (the console has no VCLibs framework; SDL3 imports vccorlib140_app.dll at load).
+# Also stash the VCLibs runtime DLLs: the package must carry them itself (the
+# console's missing VCLibs framework is the instant-exit-at-startup cause;
+# SDL3 imports vccorlib140_app.dll at load).
 vcdir=artifacts/jyrs/vc-rt
 mkdir -p "$vcdir"
-cp released/inner/*_app.dll "$vcdir/" 2>/dev/null || true
+find released -name "*_app.dll" -exec cp {} "$vcdir/" \; 2>/dev/null || true
 vc_count=$(ls "$vcdir" 2>/dev/null | wc -l)
 [ "$vc_count" -ge 5 ] || { echo "FATAL: expected the bundled VC runtime DLLs in the released package (found $vc_count)" >&2; exit 1; }
 ls -la artifacts/jyrs "$vcdir"
