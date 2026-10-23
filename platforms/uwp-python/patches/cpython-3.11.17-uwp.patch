@@ -602,7 +602,7 @@
 diff --git a/Modules/timemodule.c b/Modules/timemodule.c
 --- a/Modules/timemodule.c
 +++ b/Modules/timemodule.c
-@@ -39,10 +39,15 @@
+@@ -39,10 +39,16 @@
  #  include <sanitizer/msan_interface.h>
  #endif
  
@@ -611,9 +611,10 @@ diff --git a/Modules/timemodule.c b/Modules/timemodule.c
  #  define _Py_daylight _daylight
  #  define _Py_tzname _tzname
 +#  ifdef WWHD_UWP
-+/* Newer UWP SDK headers hide the POSIX aliases (tzset and friends);
-+   the underscore CRT names remain available. */
-+#    define tzset _tzset
++/* The UCRT exposes neither tzset nor _tzset to UWP apps (desktop-only API).
++   The CRT initializes its zone statics itself, so a no-op keeps the module
++   functional; localtime()/mktime() refresh the zone when needed. */
++#    define tzset() ((void)0)
 +#  endif
  #else
  #  define _Py_timezone timezone
