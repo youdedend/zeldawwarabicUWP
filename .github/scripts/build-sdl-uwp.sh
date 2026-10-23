@@ -21,7 +21,7 @@ fresh_build() {  # fresh_build <build-dir>
     fi
 }
 
-trap 'status=$?; exec 1>&3 2>&4; cat "$trace"; if [ $status -ne 0 ]; then tail -n 45 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[sdl] /"; fi' EXIT
+trap 'status=$?; exec 1>&3 2>&4; cat "$trace"; if [ $status -ne 0 ]; then tr -d "\\r" < "$trace" > "$trace.clean"; grep -E "FAILED:|error C[0-9]|fatal error|error LNK|error MSB|ninja: build stopped|CMake Error|error:" "$trace.clean" | head -20 > "$trace.err" || true; if [ -s "$trace.err" ]; then fold -w 850 "$trace.err" | sed "s/^/::error::[sdl] /"; fi; tail -n 25 "$trace.clean" | tr "\\n" "~" | fold -w 900 | sed "s/^/::error::[sdl] tail /"; fi' EXIT
 
 echo '== Cloning SDL3_UWP =='
 if [ ! -d sdl-src ]; then

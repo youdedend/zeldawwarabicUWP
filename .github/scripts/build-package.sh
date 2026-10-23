@@ -24,7 +24,7 @@ fresh_build() {  # fresh_build <build-dir>
     fi
 }
 
-trap 'status=$?; exec 1>&3 2>&4; cat "$trace"; if [ $status -ne 0 ]; then tail -n 50 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[package] /"; fi' EXIT
+trap 'status=$?; exec 1>&3 2>&4; cat "$trace"; if [ $status -ne 0 ]; then tr -d "\\r" < "$trace" > "$trace.clean"; grep -E "FAILED:|error C[0-9]|fatal error|error LNK|error MSB|ninja: build stopped|CMake Error|error:" "$trace.clean" | head -20 > "$trace.err" || true; if [ -s "$trace.err" ]; then fold -w 850 "$trace.err" | sed "s/^/::error::[package] /"; fi; tail -n 25 "$trace.clean" | tr "\\n" "~" | fold -w 900 | sed "s/^/::error::[package] tail /"; fi' EXIT
 
 art=$root/artifacts
 art_win=$(cygpath -m "$art")          # D:/... mixed mode: CMake- and MSYS-safe
