@@ -50,6 +50,10 @@ for path in paths:
         emit("imports " + name, [f"ERROR {error}"])
         reported += 1
 
+import os as _os
+staged = sorted(f for f in _os.listdir("package") if f.lower().endswith(".dll"))
+emit("staged dlls", [", ".join(staged) or "NONE"])
+
 manifest = open("package/AppxManifest.xml", encoding="utf-8-sig").read()
 app = re.search(r"<Applications>.*?</Applications>", manifest, re.S)
 deps = re.search(r"<Dependencies>.*?</Dependencies>", manifest, re.S)

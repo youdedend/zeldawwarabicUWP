@@ -77,6 +77,13 @@ if [ -f artifacts/jyrs/SDL3.dll ]; then
 else
     cp artifacts/sdl-uwp/SDL3.dll package/SDL3.dll
 fi
+# The released package bundles the VC runtime *_app DLLs inside itself and never
+# relies on the VCLibs framework (which the console may not have): bundle them too,
+# exactly like the released package. vccorlib140_app.dll is load-critical for SDL3.
+if [ -d released/inner ]; then
+    cp released/inner/*_app.dll package/ 2>/dev/null || true
+fi
+[ -f package/vccorlib140_app.dll ] || { echo 'FATAL: vccorlib140_app.dll is not staged - the app cannot load its runtime' >&2; exit 1; }
 cp artifacts/python-uwp/wwhd-python.dll package/
 cp artifacts/python-uwp/python311.zip package/
 cp artifacts/mesa-driver/*.dll package/
