@@ -74,7 +74,7 @@ else
 fi
 rm -f "$uwp_patch_lf"
 # Verify the patch really took effect (representative hunks in three files).
-for probe in "PC/pyconfig.h:WWHD_UWP" "Modules/timemodule.c:define tzset _tzset" "Modules/posixmodule.c:WWHD_UWP"; do
+for probe in "PC/pyconfig.h:WWHD_UWP" "Modules/timemodule.c:define tzset() ((void)0)" "Modules/posixmodule.c:WWHD_UWP"; do
     file="deps-cpython/${probe%%:*}"
     needle="${probe#*:}"
     grep -q "$needle" "$file" || { echo "FATAL: $file lacks the patched content ($needle) - the UWP patch did not land" >&2; exit 1; }
