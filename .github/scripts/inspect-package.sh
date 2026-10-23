@@ -9,7 +9,7 @@ trace=$(mktemp)
 exec >"$trace" 2>&1
 trap 'status=$?; exec 1>&3 2>&4; cat "$trace"; if [ $status -ne 0 ]; then tail -n 25 "$trace" | tr "\n" "~" | fold -w 900 | sed "s/^/::error::[inspect] /"; fi' EXIT
 
-pip install -q pefile
+python -m pip install -q pefile || pip install -q pefile || echo 'pefile unavailable - imports will be skipped' >&2
 python3 - <<'PYEOF'
 import glob, os, re, textwrap
 import pefile
