@@ -96,8 +96,15 @@ void python_report(void* p,const char* bytes,size_t size){
    status(s,"Translating game code...",25+int(10*(std::min)(unit,77u)/78),std::to_string(unit+1)+" / 78 files");
  }
 }
+static std::string app_version_text(){
+ try{auto v=winrt::Windows::ApplicationModel::Package::Current().Id().Version();
+  return std::to_string(v.Major)+"."+std::to_string(v.Minor)+"."+std::to_string(v.Build)+"."+std::to_string(v.Revision);}
+ catch(...){return "unknown";}
+}
 void fail(State& s,const std::string& error){
- report(nullptr,error.c_str());{std::lock_guard lock(s.mutex);s.error=error;}s.finished=true;
+ report(nullptr,error.c_str());
+ {std::lock_guard lock(s.mutex);s.error=error+"\n\nApp version: "+app_version_text();}
+ s.finished=true;
 }
 void add_images(std::vector<Choice>& choices,const StorageFolder& drive,const StorageFolder& folder){
  std::vector<StorageFile> images,keys;StorageFile common{nullptr};
@@ -195,6 +202,7 @@ void prepare(State& s,Choice choice){
  winrt::init_apartment(winrt::apartment_type::multi_threaded);
  try{
   auto home=fs::path(winrt::Windows::ApplicationModel::Package::Current().InstalledLocation().Path().c_str());
+  report(nullptr,("WWHD-UWP Arabic Edition app version "+app_version_text()).c_str());
   auto profile=read(home/L"preparation-profile.txt");StorageFolder job{nullptr};
   {std::lock_guard lock(s.mutex);s.display_game=choice.image?winrt::to_string(choice.image.Name()):"The Wind Waker HD";}
   if(!choice.game){
