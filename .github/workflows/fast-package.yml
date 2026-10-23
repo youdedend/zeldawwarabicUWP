@@ -101,9 +101,12 @@ jobs:
           $manifest = Get-Content package\AppxManifest.xml -Raw
           $manifest = $manifest -replace '<DisplayName>[^<]*</DisplayName>', '<DisplayName>The Legend Of Zelda Wind Waker</DisplayName>'
           $manifest = $manifest -replace 'DisplayName="[^"]*"', 'DisplayName="The Legend Of Zelda Wind Waker"'
-          # Each release bumps the version so the Device Portal update keeps the app's
-          # LocalState (save data, prepared game profiles) instead of needing an uninstall.
-          $manifest = $manifest -replace '(<Identity[^>]*Version=")[^"]*(")', '${1}0.1.3.0${2}'
+          # Each release bumps the version (the VERSION file) so the Device Portal update
+          # keeps the app's LocalState (save data, prepared game profiles).
+          $version = (Get-Content VERSION -Raw).Trim()
+          $manifest = $manifest -replace '(<Identity[^>]*Version=")[^"]*(")', ('$1' + $version + '.0$2')
+          if ($manifest -notmatch ('Version="' + [regex]::Escape($version) + '\.0"')) { throw "the version bump to $version did not apply" }
+          Write-Host "::notice::[fast] packaged identity: $(($manifest | Select-String '<Identity[^>]*/>').Matches.Value)"
           Set-Content package\AppxManifest.xml $manifest -Encoding UTF8
           Write-Host '== Manifest identity =='
           ($manifest | Select-String '<Identity[^>]*/>').Matches.Value
@@ -162,10 +165,12 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: arabic-v0.1.0
-          RELEASE_TITLE: WWHD-UWP Arabic Edition v0.1.0
           NOTES_FILE: .github/release-notes-arabic.md
           ASSETS_DIR: assets
           RENAME_FROM: wwhd-uwp-arabic-fast.appx wwhd-uwp-arabic-fast.pfx wwhd-uwp-arabic-fast.cer
           RENAME_TO: wwhd-uwp-arabic.appx wwhd-uwp-arabic.pfx wwhd-uwp-arabic.cer
-        run: bash .github/scripts/publish-release.sh wwhd-uwp-arabic.appx wwhd-uwp-arabic.pfx wwhd-uwp-arabic.cer Arabic-Hesham-mod.zip
+        run: |
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          export RELEASE_TAG="arabic-v${VERSION}"
+          export RELEASE_TITLE="WWHD-UWP Arabic Edition v${VERSION}"
+          bash .github/scripts/publish-release.sh wwhd-uwp-arabic.appx wwhd-uwp-arabic.pfx wwhd-uwp-arabic.cer Arabic-Hesham-mod.zip
