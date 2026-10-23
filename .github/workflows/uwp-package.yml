@@ -74,7 +74,10 @@ jobs:
         run: |
           Invoke-WebRequest "https://codeload.github.com/ZeldaWWHDRecomp/ZeldaWWHDRecomp/tar.gz/$env:UPSTREAM_REF" -OutFile upstream.tar.gz
           tar -xzf upstream.tar.gz
-          Move-Item "ZeldaWWHDRecomp-$($env:UPSTREAM_REF.Substring(0, 12))" upstream
+          # codeload names the directory after the exact ref (the full SHA here): resolve it.
+          $upstream = Get-ChildItem -Directory -Filter 'ZeldaWWHDRecomp-*' | Select-Object -First 1
+          if (-not $upstream) { throw 'upstream tarball did not extract as expected' }
+          Move-Item $upstream.FullName upstream
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           Move-Item upstream/tools artifacts/upstream-tools
           Get-ChildItem artifacts/upstream-tools | Select-Object Name

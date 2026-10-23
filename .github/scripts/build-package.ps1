@@ -45,7 +45,7 @@ cmake -S (Join-Path $root 'platforms\uwp-game') -B build\game `
     -DCMAKE_SYSTEM_NAME=WindowsStore -DCMAKE_SYSTEM_VERSION=10.0 `
     "-DWWHD_SDL_SOURCE=$(Join-Path $art 'sdl-src')" `
     "-DWWHD_SDL_BUILD=$(Join-Path $art 'sdl-uwp')" `
-    "-DWWHD_VULKAN_HEADERS=$(Join-Path $art 'vulkan-headers')" `
+    "-DWWHD_VULKAN_HEADERS=$(Join-Path $art 'vulkan-headers\include')" `
     "-DWWHD_PYTHON_BUILD=$(Join-Path $art 'python-uwp')" `
     "-DWWHD_CLANG_BUILD=$(Join-Path $art 'clang-uwp')" `
     -DWWHD_DYNAMIC_GAMECODE=ON -DWWHD_UNIFIED_PREPARATION=ON
@@ -78,9 +78,10 @@ foreach ($h in 'stdint.h', 'string.h', 'math.h', 'stdio.h', 'stdlib.h') {
 }
 
 # BundledMods/: the staged Arabic Hesham translation (staged by fetch_patch.py + stage_mod.py;
-# the game build's post-build step copies it into build\game\BundledMods).
-$modSource = Join-Path $root 'build\game\BundledMods\content.arabic_hesham'
-if (-not (Test-Path "$modSource\manifest.json")) { $modSource = Join-Path $root '.local\arabic\content.arabic_hesham' }
+# the game build's post-build step copies it next to the exe, which is where the runtime looks).
+$modSource = Get-ChildItem (Join-Path $root 'build\game') -Recurse -Directory -Filter content.arabic_hesham -ErrorAction SilentlyContinue |
+    Where-Object { Test-Path (Join-Path $_.FullName 'manifest.json') } | Select-Object -First 1
+if (-not $modSource) { $modSource = Join-Path $root '.local\arabic\content.arabic_hesham' } else { $modSource = $modSource.FullName }
 if (-not (Test-Path "$modSource\manifest.json")) { throw 'Arabic mod is not staged (run arabic/fetch_patch.py + arabic/stage_mod.py first)' }
 New-Item -ItemType Directory -Force -Path "$pkg\BundledMods" | Out-Null
 Copy-Item $modSource "$pkg\BundledMods\content.arabic_hesham" -Recurse

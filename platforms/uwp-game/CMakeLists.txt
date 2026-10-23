@@ -149,9 +149,8 @@ set(WWHD_ARABIC_MOD "${WWHD_ROOT}/.local/arabic/content.arabic_hesham" CACHE PAT
  "Staged content.arabic_hesham mod directory (arabic/stage_mod.py --out .local/arabic/staged)")
 if(EXISTS "${WWHD_ARABIC_MOD}/manifest.json")
  add_custom_command(TARGET wwhd-uwp-game POST_BUILD
-  COMMAND ${CMAKE_COMMAND} "-DSOURCE=${WWHD_ARABIC_MOD}" "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/BundledMods/content.arabic_hesham"
+  COMMAND ${CMAKE_COMMAND} "-DSOURCE=${WWHD_ARABIC_MOD}" "-DOUT=$<TARGET_FILE_DIR:wwhd-uwp-game>/BundledMods/content.arabic_hesham"
   -P "${WWHD_ROOT}/cmake/CopyMod.cmake" VERBATIM)
- install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/BundledMods" DESTINATION .)
  message(STATUS "Arabic Hesham mod: bundling ${WWHD_ARABIC_MOD}")
 else()
  message(STATUS "Arabic Hesham mod not staged; build without it (arabic/stage_mod.py --zip <verified archive> --out .local/arabic/staged)")
