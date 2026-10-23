@@ -57,17 +57,31 @@ rm -f "$uwp_patch_lf"
 
 # deepfreeze.c is generated during a CPython build and absent from the source tarball; the
 # workflow builds it on Linux (host-independent C) and hands it over via DEEPFREEZE_C.
-if [ -n "${DEEPFREEZE_C:-}" ] && [ -f "$DEEPFREEZE_C" ]; then
+# Both installs FAIL LOUDLY when set but missing: a silent skip costs a whole CI round-trip.
+if [ -n "${DEEPFREEZE_C:-}" ]; then
+    if [ ! -f "$DEEPFREEZE_C" ]; then
+        echo "FATAL: DEEPFREEZE_C is set but the file is missing: $DEEPFREEZE_C" >&2
+        find artifacts/cpython-deepfreeze -type f 2>/dev/null || true
+        exit 1
+    fi
     mkdir -p deps-cpython/Python/deepfreeze
     cp "$DEEPFREEZE_C" deps-cpython/Python/deepfreeze/deepfreeze.c
     echo "deepfreeze.c installed ($(stat -c %s deps-cpython/Python/deepfreeze/deepfreeze.c) bytes)"
 fi
 # getpath.h (generated frozen bytecode for getpath.py) is included by Modules/getpath.c.
-if [ -n "${GETPATH_H:-}" ] && [ -f "$GETPATH_H" ]; then
+if [ -n "${GETPATH_H:-}" ]; then
+    if [ ! -f "$GETPATH_H" ]; then
+        echo "FATAL: GETPATH_H is set but the file is missing: $GETPATH_H" >&2
+        find artifacts/cpython-getpath-h -type f 2>/dev/null || true
+        exit 1
+    fi
     mkdir -p deps-cpython/Python/frozen_modules
     cp "$GETPATH_H" deps-cpython/Python/frozen_modules/getpath.h
     echo "getpath.h installed ($(stat -c %s deps-cpython/Python/frozen_modules/getpath.h) bytes)"
 fi
+# Last line of defense: the generate step cannot succeed without these two generated files.
+[ -f deps-cpython/Python/deepfreeze/deepfreeze.c ] || { echo "FATAL: deepfreeze.c still absent from the source tree" >&2; exit 1; }
+[ -f deps-cpython/Python/frozen_modules/getpath.h ] || { echo "FATAL: getpath.h still absent from the source tree" >&2; exit 1; }
 
 echo '== Building wwhd-python (UWP) =='
 fresh_build "$root/build/python"

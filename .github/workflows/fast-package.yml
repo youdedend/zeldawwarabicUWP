@@ -115,7 +115,8 @@ jobs:
           Export-Certificate -Cert $cert -FilePath wwhd-uwp-arabic-fast.cer | Out-Null
           & $signtool sign /fd SHA256 /f wwhd-uwp-arabic-fast.pfx /p 'wwhd-uwp-arabic' wwhd-uwp-arabic-fast.appx
           if ($LASTEXITCODE -ne 0) { throw 'signtool failed' }
-          Get-ChildItem wwhd-uwp-arabic-fast.* | Select-Object Name, Length
+          Compress-Archive -Path build/arabic/staged/content.arabic_hesham -DestinationPath Arabic-Hesham-mod.zip -Force
+          Get-ChildItem wwhd-uwp-arabic-fast.*, Arabic-Hesham-mod.zip | Select-Object Name, Length
           Write-Host 'PASS fast package'
 
       - uses: actions/upload-artifact@v4
@@ -125,6 +126,7 @@ jobs:
             wwhd-uwp-arabic-fast.appx
             wwhd-uwp-arabic-fast.pfx
             wwhd-uwp-arabic-fast.cer
+            Arabic-Hesham-mod.zip
           retention-days: 14
           if-no-files-found: error
 
@@ -140,7 +142,9 @@ jobs:
           name: wwhd-uwp-arabic-fast-appx
           path: assets
 
-      - name: Create the release with the package and source attached
+      - uses: actions/checkout@v4
+
+      - name: Create or refresh the release with the package attached
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -151,41 +155,23 @@ jobs:
           mv wwhd-uwp-arabic-fast.cer wwhd-uwp-arabic.cer
           cd ..
           TAG="arabic-v0.1.0"
-          NOTES=$(cat <<'EOF'
-          WWHD-UWP **Arabic Edition** - self-contained UWP package built on GitHub Actions.
-
-          ## What is inside
-          - `wwhd-uwp-arabic.appx` - signed package: JYRS20 WWHD-UWP v0.1.2 runtime + the bundled
-            Arabic Hesham (موقظ الرياح) translation mod + the native Windfall pirate-door riddle
-            bypass + the RTL text engine (activates automatically from the Arabic font).
-          - `wwhd-uwp-arabic.pfx` / `wwhd-uwp-arabic.cer` - the self-signing certificate
-            (CN=WWHDRecompDevelopment, PFX password: `wwhd-uwp-arabic`).
-
-          ## Install (Windows)
-          1. Install `wwhd-uwp-arabic.cer` into *Trusted People* (Local Machine).
-          2. Double-click `wwhd-uwp-arabic.appx` (or `Add-AppxPackage .\wwhd-uwp-arabic.appx`).
-
-          ## Install (Xbox Dev Mode)
-          1. Install `wwhd-uwp-arabic.cer` on the console via the Device Portal.
-          2. Deploy `wwhd-uwp-arabic.appx` via the Device Portal (*Home > Games & apps*).
-
-          ## Enable the Arabic translation
-          Open *Settings -> Mods* in-game once and enable **Arabic Hesham** if it is not already
-          active. The RTL text engine switches on automatically.
-
-          ## Source code
-          The `Source code (zip)` and `Source code (tar.gz)` links below are the complete
-          source tree for this package (runtime edits, mod tooling, build workflows and scripts).
-          EOF
-          )
-          if gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
-            gh release upload "$TAG" assets/* --repo "${GITHUB_REPOSITORY}" --clobber
-            echo "Release $TAG updated"
-          else
-            gh release create "$TAG" assets/* \
-              --repo "${GITHUB_REPOSITORY}" \
-              --target "${GITHUB_REF_NAME}" \
-              --title "WWHD-UWP Arabic Edition v0.1.0" \
-              --notes "$NOTES"
-            echo "Release $TAG created"
-          fi
+          for attempt in 1 2 3; do
+            if gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
+              if gh release upload "$TAG" assets/* --repo "${GITHUB_REPOSITORY}" --clobber \
+                 && gh release edit "$TAG" --repo "${GITHUB_REPOSITORY}" \
+                      --title "WWHD-UWP Arabic Edition v0.1.0" \
+                      --notes-file .github/release-notes-arabic.md; then
+                echo "Release $TAG updated"; break
+              fi
+            else
+              if gh release create "$TAG" assets/* \
+                   --repo "${GITHUB_REPOSITORY}" \
+                   --target "${GITHUB_REF_NAME}" \
+                   --title "WWHD-UWP Arabic Edition v0.1.0" \
+                   --notes-file .github/release-notes-arabic.md; then
+                echo "Release $TAG created"; break
+              fi
+            fi
+            echo "attempt $attempt failed (a parallel lane may be editing the release)"; sleep 20
+            [ "$attempt" = 3 ] && exit 1
+          done

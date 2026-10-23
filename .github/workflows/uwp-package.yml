@@ -116,9 +116,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: cpython-deepfreeze
-          path: |
-            cpython-3.11.17/Python/deepfreeze/deepfreeze.c
-            cpython-3.11.17/Python/frozen_modules/getpath.h
+          path: cpython-3.11.17/Python/deepfreeze/deepfreeze.c
+          retention-days: 90
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpython-getpath-h
+          path: cpython-3.11.17/Python/frozen_modules/getpath.h
           retention-days: 90
           if-no-files-found: error
 
@@ -183,11 +187,15 @@ jobs:
         with:
           name: cpython-deepfreeze
           path: artifacts/cpython-deepfreeze
+      - uses: actions/download-artifact@v4
+        with:
+          name: cpython-getpath-h
+          path: artifacts/cpython-getpath-h
       - name: Build CPython UWP
         shell: bash
         env:
           DEEPFREEZE_C: ${{ github.workspace }}/artifacts/cpython-deepfreeze/deepfreeze.c
-          GETPATH_H: ${{ github.workspace }}/artifacts/cpython-deepfreeze/getpath.h
+          GETPATH_H: ${{ github.workspace }}/artifacts/cpython-getpath-h/getpath.h
         run: bash .github/scripts/build-python-uwp.sh
 
       - name: Fetch the Mesa Dozen UWP driver
@@ -227,3 +235,49 @@ jobs:
             wwhd-uwp-arabic.cer
           retention-days: 14
           if-no-files-found: error
+
+  publish-release:
+    name: Publish the full package to Releases
+    runs-on: ubuntu-latest
+    needs: package
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: wwhd-uwp-arabic-appx
+          path: assets
+
+      - name: Attach the self-contained package to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          cd assets
+          mv wwhd-uwp-arabic.appx wwhd-uwp-arabic-full.appx
+          mv wwhd-uwp-arabic.pfx wwhd-uwp-arabic-full.pfx
+          mv wwhd-uwp-arabic.cer wwhd-uwp-arabic-full.cer
+          rm -f wwhd-uwp-arabic-unsigned.appx
+          cd ..
+          TAG="arabic-v0.1.0"
+          for attempt in 1 2 3; do
+            if gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
+              if gh release upload "$TAG" assets/wwhd-uwp-arabic-full.* --repo "${GITHUB_REPOSITORY}" --clobber \
+                 && gh release edit "$TAG" --repo "${GITHUB_REPOSITORY}" \
+                      --title "WWHD-UWP Arabic Edition v0.1.0" \
+                      --notes-file .github/release-notes-arabic.md; then
+                echo "Release $TAG updated"; break
+              fi
+            else
+              if gh release create "$TAG" assets/wwhd-uwp-arabic-full.* \
+                   --repo "${GITHUB_REPOSITORY}" \
+                   --target "${GITHUB_REF_NAME}" \
+                   --title "WWHD-UWP Arabic Edition v0.1.0" \
+                   --notes-file .github/release-notes-arabic.md; then
+                echo "Release $TAG created"; break
+              fi
+            fi
+            echo "attempt $attempt failed (a parallel lane may be editing the release)"; sleep 20
+            [ "$attempt" = 3 ] && exit 1
+          done
