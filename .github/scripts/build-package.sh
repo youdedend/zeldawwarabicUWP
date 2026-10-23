@@ -129,6 +129,9 @@ Export-PfxCertificate -Cert \$cert -FilePath '$root_win\wwhd-uwp-arabic.pfx' -Pa
 Export-Certificate -Cert \$cert -FilePath '$root_win\wwhd-uwp-arabic.cer' | Out-Null
 "
 cp wwhd-uwp-arabic-unsigned.appx wwhd-uwp-arabic.appx
+# Report the staged package's imports and manifest as ::notice:: annotations: the
+# sandbox-side channel for diffing this build against the proven-working fast build.
+bash "$root/.github/scripts/inspect-package.sh" || true
 MSYS2_ARG_CONV_EXCL="*" "$signtool" sign /fd SHA256 /f "$root_win/wwhd-uwp-arabic.pfx" /p 'wwhd-uwp-arabic' "$root_win/wwhd-uwp-arabic.appx"
 
 echo '== Package artifacts =='
