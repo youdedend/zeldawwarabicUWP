@@ -80,10 +80,12 @@ fi
 # The released package bundles the VC runtime *_app DLLs inside itself and never
 # relies on the VCLibs framework (which the console may not have): bundle them too,
 # exactly like the released package. vccorlib140_app.dll is load-critical for SDL3.
-if [ -d released/inner ]; then
-    cp released/inner/*_app.dll package/ 2>/dev/null || true
+if [ ! -d artifacts/jyrs/vc-rt ] || [ -z "$(ls artifacts/jyrs/vc-rt 2>/dev/null)" ]; then
+    echo 'runtime DLLs missing from artifacts: re-running the released-package fetch'
+    bash "$root/.github/scripts/fetch-released-sdl3.sh"
 fi
-[ -f package/vccorlib140_app.dll ] || { echo 'FATAL: vccorlib140_app.dll is not staged - the app cannot load its runtime' >&2; exit 1; }
+cp artifacts/jyrs/vc-rt/*_app.dll package/
+[ -f package/vccorlib140_app.dll ] || { echo 'FATAL: vccorlib140_app.dll is not staged - the app cannot load its runtime' >&2; ls -la artifacts/jyrs artifacts/jyrs/vc-rt released released/inner 2>&1 | head -30; exit 1; }
 cp artifacts/python-uwp/wwhd-python.dll package/
 cp artifacts/python-uwp/python311.zip package/
 cp artifacts/mesa-driver/*.dll package/

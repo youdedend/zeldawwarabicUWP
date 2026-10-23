@@ -33,5 +33,12 @@ dll=$(find released -iname "SDL3.dll" | head -1)
 [ -n "$dll" ] || { echo 'FATAL: the released package has no SDL3.dll' >&2; find released -name "*.dll" | head; exit 1; }
 mkdir -p artifacts/jyrs
 cp "$dll" artifacts/jyrs/SDL3.dll
-ls -la artifacts/jyrs
-echo "PASS sdl3 ($(stat -c %s artifacts/jyrs/SDL3.dll) bytes)"
+# Also stash the bundled VC runtime *_app DLLs: the package must carry them itself
+# (the console has no VCLibs framework; SDL3 imports vccorlib140_app.dll at load).
+vcdir=artifacts/jyrs/vc-rt
+mkdir -p "$vcdir"
+cp released/inner/*_app.dll "$vcdir/" 2>/dev/null || true
+vc_count=$(ls "$vcdir" 2>/dev/null | wc -l)
+[ "$vc_count" -ge 5 ] || { echo "FATAL: expected the bundled VC runtime DLLs in the released package (found $vc_count)" >&2; exit 1; }
+ls -la artifacts/jyrs "$vcdir"
+echo "PASS sdl3 ($(stat -c %s artifacts/jyrs/SDL3.dll) bytes, $vc_count runtime DLLs)"
