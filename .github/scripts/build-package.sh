@@ -89,6 +89,9 @@ if [ -z "$mod_source" ]; then mod_source="$root/.local/arabic/content.arabic_hes
 [ -e "$mod_source/manifest.json" ] || { echo 'Arabic mod is not staged (run arabic/fetch_patch.py + arabic/stage_mod.py first)'; exit 1; }
 mkdir -p package/BundledMods
 cp -r "$mod_source" package/BundledMods/content.arabic_hesham
+# CMake generates the manifest at configure time (Unified/Dynamic per the build mode).
+[ -f build/game/AppxManifest.xml ] || { echo 'FATAL: CMake did not generate AppxManifest.xml' >&2; exit 1; }
+cp build/game/AppxManifest.xml package/AppxManifest.xml
 
 echo 'Package contents:'
 ls -la package
