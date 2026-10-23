@@ -93,6 +93,15 @@ jobs:
           # 2. The Arabic translation as a bundled content mod.
           New-Item -ItemType Directory -Force -Path package\BundledMods | Out-Null
           Copy-Item build\arabic\staged\content.arabic_hesham package\BundledMods\content.arabic_hesham -Recurse -Force
+          # 3. The Wind Waker HD cover icon, splash screen and the app title.
+          Copy-Item platforms\uwp-game\Assets\Square150x150Logo.png package\Assets\ -Force
+          Copy-Item platforms\uwp-game\Assets\Square44x44Logo.png package\Assets\ -Force
+          Copy-Item platforms\uwp-game\Assets\StoreLogo.png package\Assets\ -Force
+          Copy-Item platforms\uwp-game\Assets\SplashScreen.png package\Assets\ -Force
+          $manifest = Get-Content package\AppxManifest.xml -Raw
+          $manifest = $manifest -replace '<DisplayName>[^<]*</DisplayName>', '<DisplayName>The Legend Of Zelda Wind Waker</DisplayName>'
+          $manifest = $manifest -replace 'DisplayName="[^"]*"', 'DisplayName="The Legend Of Zelda Wind Waker"'
+          Set-Content package\AppxManifest.xml $manifest -Encoding UTF8
           Write-Host '== Injected files =='
           Get-Item package\prepare_game.py, package\BundledMods\content.arabic_hesham\manifest.json | Select-Object FullName, Length
           Get-ChildItem package\BundledMods -Recurse -File | ForEach-Object { Write-Host "  $($_.FullName.Substring($PWD.Path.Length + 8)) ($($_.Length) bytes)" }
