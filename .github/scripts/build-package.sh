@@ -70,7 +70,13 @@ cp "$exe" package/
 # the app fails at startup, before any UI.
 [ -f artifacts/clang-uwp/bin/wwhd-clang-bridge.dll ] || { echo 'FATAL: the clang bridge DLL is missing from artifacts (check the bridge job)'; exit 1; }
 cp artifacts/clang-uwp/bin/wwhd-clang-bridge.dll package/
-cp artifacts/sdl-uwp/SDL3.dll package/
+# Our fresh SDL3 build imports desktop-only DLLs (vccorlib140, mmdevapi) that do not
+# exist on Xbox: the released package's SDL3.dll is the proven UWP binary - prefer it.
+if [ -f artifacts/jyrs/SDL3.dll ]; then
+    cp artifacts/jyrs/SDL3.dll package/SDL3.dll
+else
+    cp artifacts/sdl-uwp/SDL3.dll package/SDL3.dll
+fi
 cp artifacts/python-uwp/wwhd-python.dll package/
 cp artifacts/python-uwp/python311.zip package/
 cp artifacts/mesa-driver/*.dll package/

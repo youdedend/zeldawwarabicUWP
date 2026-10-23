@@ -146,6 +146,17 @@ jobs:
           Copy-Item .local/arabic/staged/content.arabic_hesham .local/arabic/content.arabic_hesham -Recurse
           python arabic/verify_pack.py .local/arabic/content.arabic_hesham/content/Common/Pack/permanent_2d_UsEnglish.pack
 
+      - name: Download the released SDL3.dll (the proven UWP binary)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest $env:UPSTREAM_RELEASE_ZIP -OutFile released.zip
+          Expand-Archive released.zip -DestinationPath released -Force
+          $dll = Get-ChildItem released -Recurse -Filter SDL3.dll | Select-Object -First 1
+          if (-not $dll) { throw 'the released package has no SDL3.dll' }
+          New-Item -ItemType Directory -Force -Path artifacts/jyrs | Out-Null
+          Copy-Item $dll.FullName artifacts/jyrs/SDL3.dll -Force
+          Get-Item artifacts/jyrs/SDL3.dll | Select-Object Name, Length
+
       - name: Download the pinned upstream ZeldaWWHDRecomp tooling
         shell: pwsh
         run: |

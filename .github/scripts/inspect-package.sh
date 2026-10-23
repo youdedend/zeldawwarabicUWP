@@ -25,20 +25,34 @@ systemish = re.compile(
     r"concrt|dbghelp|winmm|sechost|shlwapi|usp10|dwrite|d3d11|dxgi|wintrust|wldp|"
     r"cryptbase|sspicli|kernelbase)", re.I)
 
-for path in sorted(glob.glob("package/*.exe") + glob.glob("package/*.dll")):
+# GitHub caps step annotations: report the load-critical modules first (the exe and
+# its startup DLLs), then the manifest. Non-system imports are what the Xbox loader
+# must resolve at process start; a miss there is an instant exit with no logs.
+priority = ["wwhd-uwp-game.exe", "wwhd-python.dll", "SDL3.dll", "wwhd-clang-bridge.dll"]
+paths = sorted(glob.glob("package/*.exe") + glob.glob("package/*.dll"))
+paths.sort(key=lambda p: priority.index(os.path.basename(p)) if os.path.basename(p) in priority else 99)
+reported = 0
+for path in paths:
+    if reported >= 6:
+        emit("imports", ["(remaining modules skipped - annotation cap)"])
+        break
+    name = os.path.basename(path)
+    if name not in priority:
+        continue
     try:
         pe = pefile.PE(path, fast_load=True)
         pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_IMPORT"]])
         imports = [e.dll.decode().lower() for e in getattr(pe, "DIRECTORY_ENTRY_IMPORT", [])]
         needed = [d for d in imports if not systemish.match(d)]
-        emit("imports " + os.path.basename(path), needed or ["(only system DLLs)"])
+        emit("imports " + name, needed or ["(only system DLLs)"])
+        reported += 1
     except Exception as error:
-        emit("imports " + os.path.basename(path), [f"ERROR {error}"])
+        emit("imports " + name, [f"ERROR {error}"])
+        reported += 1
 
 manifest = open("package/AppxManifest.xml", encoding="utf-8-sig").read()
-for tag, pattern in (("app", r"<Applications>.*?</Applications>"),
-                     ("deps", r"<Dependencies>.*?</Dependencies>"),
-                     ("caps", r"<Capabilities>.*?</Capabilities>")):
-    piece = re.search(pattern, manifest, re.S)
-    emit("manifest " + tag, [piece.group(0)[:700] if piece else "NONE"])
+app = re.search(r"<Applications>.*?</Applications>", manifest, re.S)
+deps = re.search(r"<Dependencies>.*?</Dependencies>", manifest, re.S)
+combined = ((deps.group(0) if deps else "") + " " + (app.group(0) if app else ""))[:800]
+emit("manifest", [combined or "NONE"])
 PYEOF
