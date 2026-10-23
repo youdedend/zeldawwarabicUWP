@@ -221,7 +221,8 @@ void prepare(State& s,Choice choice){
    if(wwhd_python_run(home.c_str(),tools.c_str(),generated.Path().c_str(),rpx.c_str(),script.c_str(),&s,python_report))
     throw std::runtime_error("Game translation failed. Only the USA original release is supported. See wwhd-console.log.");
    check_cancel(s);
-   choice.objects=generated.CreateFolderAsync(L"objects",CreationCollisionOption::FailIfExists).get();
+   choice.objects=[&]{try{return generated.CreateFolderAsync(L"objects",CreationCollisionOption::FailIfExists).get();}
+                      catch(winrt::hresult_error const&){return generated.GetFolderAsync(L"objects").get();}}();
    auto headers=home/L"CompilerHeaders";
    if(wwhd_compile::compile_generated(headers.c_str(),generated.Path().c_str(),choice.objects.Path().c_str(),&s,report,compile_progress)){
     check_cancel(s);throw std::runtime_error("Game compilation failed. Check USB connection and free space. See wwhd-console.log.");
