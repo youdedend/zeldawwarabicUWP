@@ -19,6 +19,15 @@ rm -rf released
 pwsh -NoProfile -Command "Expand-Archive -Path released.zip -DestinationPath released -Force" 2>/dev/null \
   || powershell -NoProfile -Command "Expand-Archive -Path released.zip -DestinationPath released -Force"
 
+# The released zip wraps the package in an .appx (itself a zip): extract that too.
+inner=$(find released -iname "*.appx" | head -1)
+if [ -n "$inner" ]; then
+    echo "inner package: $inner"
+    cp "$inner" inner.zip
+    pwsh -NoProfile -Command "Expand-Archive -Path inner.zip -DestinationPath released/inner -Force" 2>/dev/null \
+      || powershell -NoProfile -Command "Expand-Archive -Path inner.zip -DestinationPath released/inner -Force"
+fi
+
 dll=$(find released -iname "SDL3.dll" | head -1)
 [ -n "$dll" ] || { echo 'FATAL: the released package has no SDL3.dll' >&2; find released -name "*.dll" | head; exit 1; }
 mkdir -p artifacts/jyrs
