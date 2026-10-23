@@ -122,7 +122,8 @@ jobs:
 
   package:
     name: Runtime, Arabic mod and APPX
-    runs-on: windows-latest
+    # windows-2022 ships VS 2022: CPython 3.11 predates the VS 18-only windows-latest image.
+    runs-on: windows-2022
     needs: [clang, deepfreeze]
     steps:
       - uses: actions/checkout@v4
