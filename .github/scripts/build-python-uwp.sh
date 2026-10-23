@@ -60,6 +60,11 @@ if [ ! -d deps-cpython ]; then
     mv "cpython-${CPYTHON_VERSION#v}" deps-cpython
     state=fresh
 fi
+# git apply needs a repository anchored at THIS tree: without its own .git, git
+# discovers the Actions checkout's repo above and resolves patch paths against that
+# root - silently applying NOTHING while exiting 0 (reproduced locally, exact match
+# with the runner's failure and its [attr] warnings).
+[ -e deps-cpython/.git ] || git -C deps-cpython init -q
 # NOTE: set -e is suspended inside if/then bodies, so applies carry explicit || FATAL.
 if [ "$state" = fresh ]; then
     git -C deps-cpython apply "$uwp_patch_lf" || { echo "FATAL: git apply failed after a successful check" >&2; exit 1; }
