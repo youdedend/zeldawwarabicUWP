@@ -26,6 +26,7 @@ permissions:
   contents: read
 
 env:
+  UPSTREAM_RELEASE_ZIP: https://github.com/JYRS20/WWHD-UWP/releases/download/v0.1.2/wwhd-uwp-0.1.zip
   LLVM_VERSION: 20.1.8
   CPYTHON_VERSION: v3.11.17
   ZLIB_VERSION: 1.3.1
