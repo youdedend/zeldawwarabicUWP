@@ -145,33 +145,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Create or refresh the release with the package attached
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: arabic-v0.1.0
+          RELEASE_TITLE: WWHD-UWP Arabic Edition v0.1.0
+          NOTES_FILE: .github/release-notes-arabic.md
         run: |
-          set -e
           cd assets
           mv wwhd-uwp-arabic-fast.appx wwhd-uwp-arabic.appx
           mv wwhd-uwp-arabic-fast.pfx wwhd-uwp-arabic.pfx
           mv wwhd-uwp-arabic-fast.cer wwhd-uwp-arabic.cer
-          cd ..
-          TAG="arabic-v0.1.0"
-          for attempt in 1 2 3; do
-            if gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
-              if gh release upload "$TAG" assets/* --repo "${GITHUB_REPOSITORY}" --clobber \
-                 && gh release edit "$TAG" --repo "${GITHUB_REPOSITORY}" \
-                      --title "WWHD-UWP Arabic Edition v0.1.0" \
-                      --notes-file .github/release-notes-arabic.md; then
-                echo "Release $TAG updated"; break
-              fi
-            else
-              if gh release create "$TAG" assets/* \
-                   --repo "${GITHUB_REPOSITORY}" \
-                   --target "${GITHUB_REF_NAME}" \
-                   --title "WWHD-UWP Arabic Edition v0.1.0" \
-                   --notes-file .github/release-notes-arabic.md; then
-                echo "Release $TAG created"; break
-              fi
-            fi
-            echo "attempt $attempt failed (a parallel lane may be editing the release)"; sleep 20
-            [ "$attempt" = 3 ] && exit 1
-          done
+          bash "${GITHUB_WORKSPACE}/.github/scripts/publish-release.sh" wwhd-uwp-arabic.appx wwhd-uwp-arabic.pfx wwhd-uwp-arabic.cer Arabic-Hesham-mod.zip

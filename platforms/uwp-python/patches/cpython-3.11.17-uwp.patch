@@ -599,3 +599,22 @@
          if cls.DEBUG_BUILD:
              registry_key = cls.REGISTRY_KEY_DEBUG
          else:
+diff --git a/Modules/timemodule.c b/Modules/timemodule.c
+--- a/Modules/timemodule.c
++++ b/Modules/timemodule.c
+@@ -39,10 +39,15 @@
+ #  include <sanitizer/msan_interface.h>
+ #endif
+ 
+ #ifdef _MSC_VER
+ #  define _Py_timezone _timezone
+ #  define _Py_daylight _daylight
+ #  define _Py_tzname _tzname
++#  ifdef WWHD_UWP
++/* Newer UWP SDK headers hide the POSIX aliases (tzset and friends);
++   the underscore CRT names remain available. */
++#    define tzset _tzset
++#  endif
+ #else
+ #  define _Py_timezone timezone
+ #  define _Py_daylight daylight
