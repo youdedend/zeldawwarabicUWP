@@ -82,10 +82,27 @@ jobs:
       - name: Set up the MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Cache the SDL3 UWP build (incremental)
+        uses: actions/cache@v4
+        with:
+          path: |
+            sdl-src
+            build/sdl
+          key: sdl-uwp-v1-${{ github.run_id }}
+          restore-keys: sdl-uwp-v1-
       - name: Build SDL3 UWP
         shell: pwsh
         run: .github/scripts/build-sdl-uwp.ps1
 
+      - name: Cache the CPython UWP build (incremental)
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps-cpython
+            deps-zlib
+            build/python
+          key: cpython-uwp-v1-${{ github.run_id }}
+          restore-keys: cpython-uwp-v1-
       - name: Build CPython UWP
         shell: pwsh
         run: .github/scripts/build-python-uwp.ps1
@@ -99,6 +116,14 @@ jobs:
           name: clang-uwp
           path: artifacts/clang-uwp
 
+      - name: Cache the runtime build tree (incremental)
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/game
+            .local/host-tools
+          key: runtime-uwp-v1-${{ github.run_id }}
+          restore-keys: runtime-uwp-v1-
       - name: Build the runtime and package the APPX
         shell: pwsh
         run: .github/scripts/build-package.ps1

@@ -24,12 +24,19 @@ Write-Host "SDL3_UWP commit: $(git rev-parse HEAD)"
 Write-Host '== Applying the repo SDL patches =='
 foreach ($patch in 'sdl-pixel-format.patch', 'sdl-wgi-input.patch') {
     # Windows checkouts are CRLF (the runner image's global core.autocrlf): normalize to LF first.
+    # Skipped when the cached source tree already carries the patch (incremental builds).
     $patchText = [System.IO.File]::ReadAllText((Join-Path $root "platforms\uwp-game\patches\$patch")) -replace "`r`n", "`n"
     $patchFile = Join-Path $env:RUNNER_TEMP $patch
     [System.IO.File]::WriteAllText($patchFile, $patchText)
-    git apply --ignore-whitespace --whitespace=nowarn $patchFile
-    if ($LASTEXITCODE -ne 0) { git apply --3way $patchFile }
-    if ($LASTEXITCODE -ne 0) { throw "$patch did not apply" }
+    git apply --check --ignore-whitespace $patchFile 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        git apply --ignore-whitespace --whitespace=nowarn $patchFile
+        if ($LASTEXITCODE -ne 0) { throw "$patch did not apply" }
+    } else {
+        git apply --check --reverse --ignore-whitespace $patchFile 2>$null
+        if ($LASTEXITCODE -eq 0) { Write-Host "$patch already applied (cached source tree)" }
+        else { git apply --3way $patchFile; if ($LASTEXITCODE -ne 0) { throw "$patch neither applies nor is applied" } }
+    }
 }
 Pop-Location
 
