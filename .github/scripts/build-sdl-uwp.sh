@@ -34,11 +34,11 @@ echo '== Applying the repo SDL patches =='
 for patch in sdl-pixel-format sdl-wgi-input; do
     tr -d '\r' < "$root/platforms/uwp-game/patches/$patch.patch" > "$RUNNER_TEMP/$patch.patch"
     if git apply --check --ignore-whitespace "$RUNNER_TEMP/$patch.patch" 2>/dev/null; then
-        git apply --ignore-whitespace "$RUNNER_TEMP/$patch.patch"
+        git apply --ignore-whitespace "$RUNNER_TEMP/$patch.patch" || { echo "FATAL: $patch failed to apply after a successful check" >&2; exit 1; }
     elif git apply --check --reverse --ignore-whitespace "$RUNNER_TEMP/$patch.patch" 2>/dev/null; then
         echo "$patch already applied (cached source tree)"
     else
-        git apply --3way "$RUNNER_TEMP/$patch.patch"
+        git apply --3way "$RUNNER_TEMP/$patch.patch" || { echo "FATAL: $patch 3way apply failed" >&2; exit 1; }
     fi
 done
 cd "$root"

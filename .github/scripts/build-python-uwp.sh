@@ -44,8 +44,10 @@ fi
 UWP_PATCH="$root/platforms/uwp-python/patches/cpython-3.11.17-uwp.patch"
 uwp_patch_lf="$root/uwp-patch-lf.tmp"
 tr -d '\r' < "$UWP_PATCH" > "$uwp_patch_lf"
+# NOTE: set -e is suspended inside if/then bodies, so every apply below carries an
+# explicit || FATAL - a silently skipped patch costs a full CI round-trip to discover.
 if git -C deps-cpython apply --check "$uwp_patch_lf" 2>/dev/null; then
-    git -C deps-cpython apply "$uwp_patch_lf"
+    git -C deps-cpython apply "$uwp_patch_lf" || { echo "FATAL: git apply failed after a successful check" >&2; exit 1; }
     echo "applied cpython-3.11.17-uwp.patch"
 elif git -C deps-cpython apply --reverse --check "$uwp_patch_lf" 2>/dev/null; then
     echo "cpython-3.11.17-uwp.patch already applied"
@@ -54,6 +56,13 @@ else
     exit 1
 fi
 rm -f "$uwp_patch_lf"
+# Verify the patch really took effect (representative hunks in three files).
+for probe in "pyconfig.h:WWHD_UWP" "Modules/timemodule.c:define tzset _tzset" "Modules/posixmodule.c:WWHD_UWP"; do
+    file="deps-cpython/${probe%%:*}"
+    needle="${probe#*:}"
+    grep -q "$needle" "$file" || { echo "FATAL: $file lacks the patched content ($needle) - the UWP patch did not land" >&2; exit 1; }
+done
+echo "UWP patch content verified in pyconfig.h, timemodule.c, posixmodule.c"
 
 # deepfreeze.c is generated during a CPython build and absent from the source tarball; the
 # workflow builds it on Linux (host-independent C) and hands it over via DEEPFREEZE_C.

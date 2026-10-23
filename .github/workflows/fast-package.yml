@@ -151,9 +151,7 @@ jobs:
           RELEASE_TAG: arabic-v0.1.0
           RELEASE_TITLE: WWHD-UWP Arabic Edition v0.1.0
           NOTES_FILE: .github/release-notes-arabic.md
-        run: |
-          cd assets
-          mv wwhd-uwp-arabic-fast.appx wwhd-uwp-arabic.appx
-          mv wwhd-uwp-arabic-fast.pfx wwhd-uwp-arabic.pfx
-          mv wwhd-uwp-arabic-fast.cer wwhd-uwp-arabic.cer
-          bash "${GITHUB_WORKSPACE}/.github/scripts/publish-release.sh" wwhd-uwp-arabic.appx wwhd-uwp-arabic.pfx wwhd-uwp-arabic.cer Arabic-Hesham-mod.zip
+          ASSETS_DIR: assets
+          RENAME_FROM: wwhd-uwp-arabic-fast.appx wwhd-uwp-arabic-fast.pfx wwhd-uwp-arabic-fast.cer
+          RENAME_TO: wwhd-uwp-arabic.appx wwhd-uwp-arabic.pfx wwhd-uwp-arabic.cer
+        run: bash .github/scripts/publish-release.sh wwhd-uwp-arabic.appx wwhd-uwp-arabic.pfx wwhd-uwp-arabic.cer Arabic-Hesham-mod.zip
