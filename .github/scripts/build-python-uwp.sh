@@ -26,34 +26,46 @@ trap 'status=$?; exec 1>&3 2>&4; cat "$trace"; if [ $status -ne 0 ]; then tr -d 
 CPYTHON_VERSION=v3.11.17
 ZLIB_VERSION=1.3.1
 
-echo "== Downloading CPython $CPYTHON_VERSION and zlib $ZLIB_VERSION =="
-if [ ! -d deps-cpython ]; then
-    curl -sL -o cpython.tar.gz "https://github.com/python/cpython/archive/refs/tags/$CPYTHON_VERSION.tar.gz"
-    tar -xzf cpython.tar.gz
-    mv "cpython-${CPYTHON_VERSION#v}" deps-cpython
-fi
+echo "== CPython $CPYTHON_VERSION + zlib $ZLIB_VERSION =="
 if [ ! -d deps-zlib ]; then
     curl -sL -o zlib.tar.gz "https://github.com/madler/zlib/archive/refs/tags/v$ZLIB_VERSION.tar.gz"
     tar -xzf zlib.tar.gz
     mv "zlib-$ZLIB_VERSION" deps-zlib
 fi
 
-# Upstream's UWP support patch (WWHD_UWP guards over getpath.c, posixmodule, _io, ...):
-# idempotent — apply once; if it no longer applies it is already in place (reverse-check).
+# Upstream's UWP support patch (WWHD_UWP guards over getpath.c, posixmodule, _io, ...).
 # The Windows checkout can deliver the patch with CRLF line endings: normalize like the SDL patches.
 UWP_PATCH="$root/platforms/uwp-python/patches/cpython-3.11.17-uwp.patch"
 uwp_patch_lf="$root/uwp-patch-lf.tmp"
 tr -d '\r' < "$UWP_PATCH" > "$uwp_patch_lf"
-# NOTE: set -e is suspended inside if/then bodies, so every apply below carries an
-# explicit || FATAL - a silently skipped patch costs a full CI round-trip to discover.
-if git -C deps-cpython apply --check "$uwp_patch_lf" 2>/dev/null; then
+
+# Classify the tree: 'fresh' (patch applies), 'patched' (exactly the current patch is
+# in place) or 'stale' (an older patch revision - useless, re-extract). A cached tree
+# from an earlier revision of this patch would otherwise poison the build.
+state=stale
+if [ -d deps-cpython ]; then
+    if git -C deps-cpython apply --check "$uwp_patch_lf" 2>/dev/null; then
+        state=fresh
+    elif git -C deps-cpython apply --reverse --check "$uwp_patch_lf" 2>/dev/null; then
+        state=patched
+    fi
+fi
+if [ -d deps-cpython ] && [ "$state" = stale ]; then
+    echo "cached CPython tree has an outdated patch state: re-extracting a fresh tree"
+    rm -rf deps-cpython
+fi
+if [ ! -d deps-cpython ]; then
+    curl -sL -o cpython.tar.gz "https://github.com/python/cpython/archive/refs/tags/$CPYTHON_VERSION.tar.gz"
+    tar -xzf cpython.tar.gz
+    mv "cpython-${CPYTHON_VERSION#v}" deps-cpython
+    state=fresh
+fi
+# NOTE: set -e is suspended inside if/then bodies, so applies carry explicit || FATAL.
+if [ "$state" = fresh ]; then
     git -C deps-cpython apply "$uwp_patch_lf" || { echo "FATAL: git apply failed after a successful check" >&2; exit 1; }
     echo "applied cpython-3.11.17-uwp.patch"
-elif git -C deps-cpython apply --reverse --check "$uwp_patch_lf" 2>/dev/null; then
-    echo "cpython-3.11.17-uwp.patch already applied"
 else
-    echo "FATAL: the UWP patch neither applies nor reverses on this CPython tree" >&2
-    exit 1
+    echo "cpython-3.11.17-uwp.patch already applied (current revision verified)"
 fi
 rm -f "$uwp_patch_lf"
 # Verify the patch really took effect (representative hunks in three files).

@@ -31,6 +31,16 @@ cd sdl-src
 echo "SDL3_UWP commit: $(git rev-parse HEAD)"
 
 echo '== Applying the repo SDL patches =='
+# A cached tree carrying an older patch revision is useless: if any patch neither
+# applies nor reverses, re-clone instead of trusting a fuzzy 3way result.
+sdl_reclone() {
+    echo "cached SDL3_UWP tree has an outdated patch state: re-cloning"
+    cd "$root" || return 1
+    rm -rf sdl-src
+    git clone --depth 1 https://github.com/rodrigoandrigo/SDL3_UWP sdl-src || return 1
+    cd sdl-src || return 1
+    echo "SDL3_UWP commit: $(git rev-parse HEAD)"
+}
 for patch in sdl-pixel-format sdl-wgi-input; do
     tr -d '\r' < "$root/platforms/uwp-game/patches/$patch.patch" > "$RUNNER_TEMP/$patch.patch"
     if git apply --check --ignore-whitespace "$RUNNER_TEMP/$patch.patch" 2>/dev/null; then
@@ -38,7 +48,8 @@ for patch in sdl-pixel-format sdl-wgi-input; do
     elif git apply --check --reverse --ignore-whitespace "$RUNNER_TEMP/$patch.patch" 2>/dev/null; then
         echo "$patch already applied (cached source tree)"
     else
-        git apply --3way "$RUNNER_TEMP/$patch.patch" || { echo "FATAL: $patch 3way apply failed" >&2; exit 1; }
+        sdl_reclone || { echo "FATAL: could not re-clone SDL3_UWP" >&2; exit 1; }
+        git apply --ignore-whitespace "$RUNNER_TEMP/$patch.patch" || { echo "FATAL: $patch failed on the fresh tree" >&2; exit 1; }
     fi
 done
 cd "$root"
