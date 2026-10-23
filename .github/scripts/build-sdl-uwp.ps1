@@ -4,6 +4,17 @@
 #   SDL3.lib, SDL3.dll, include/   (the include/ tree of the patched SDL source)
 $ErrorActionPreference = 'Stop'
 
+# Runs a native build step, capturing output; on failure the last 50 lines are emitted as
+# error annotations (the readable channel when the log download is unavailable).
+function Invoke-Logged([string]$name, [scriptblock]$block) {
+    $log = Join-Path $env:RUNNER_TEMP ($name -replace '\\s+', '_') 
+    & $block 2>&1 | Tee-Object -FilePath $log
+    if ($LASTEXITCODE -ne 0) {
+        Get-Content $log -Tail 50 | ForEach-Object { Write-Host "::error::[$name] $_" }
+        throw "$name failed (tail emitted as annotations)"
+    }
+}
+
 # Surface terminating errors as workflow annotations (visible through the API).
 trap {
 	Write-Host ("::error::FAILED: " + $_.Exception.Message)
@@ -41,13 +52,13 @@ foreach ($patch in 'sdl-pixel-format.patch', 'sdl-wgi-input.patch') {
 Pop-Location
 
 Write-Host '== Building SDL3 (UWP shared) =='
-cmake -S sdl-src -B build\sdl `
-    -G 'Visual Studio 17 2022' -A x64 `
-    -DCMAKE_SYSTEM_NAME=WindowsStore -DCMAKE_SYSTEM_VERSION=10.0 `
-    -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF
-if ($LASTEXITCODE -ne 0) { throw 'SDL configure failed' }
-cmake --build build\sdl --config Release --target SDL3-shared
-if ($LASTEXITCODE -ne 0) { throw 'SDL build failed' }
+Invoke-Logged 'sdl-configure' {
+    cmake -S sdl-src -B build\sdl `
+        -G 'Visual Studio 17 2022' -A x64 `
+        -DCMAKE_SYSTEM_NAME=WindowsStore -DCMAKE_SYSTEM_VERSION=10.0 `
+        -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF
+}
+Invoke-Logged 'sdl-build' { cmake --build build\sdl --config Release --target SDL3-shared }
 
 $dll = Get-ChildItem build\sdl -Recurse -Filter SDL3.dll | Select-Object -First 1
 $lib = Get-ChildItem build\sdl -Recurse -Filter SDL3.lib | Select-Object -First 1

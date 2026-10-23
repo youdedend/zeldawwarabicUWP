@@ -12,6 +12,17 @@
 #   upstream-tools\               (ZeldaWWHDRecomp tools/ at the pinned upstream commit)
 $ErrorActionPreference = 'Stop'
 
+# Runs a native build step, capturing output; on failure the last 50 lines are emitted as
+# error annotations (the readable channel when the log download is unavailable).
+function Invoke-Logged([string]$name, [scriptblock]$block) {
+    $log = Join-Path $env:RUNNER_TEMP ($name -replace '\\s+', '_') 
+    & $block 2>&1 | Tee-Object -FilePath $log
+    if ($LASTEXITCODE -ne 0) {
+        Get-Content $log -Tail 50 | ForEach-Object { Write-Host "::error::[$name] $_" }
+        throw "$name failed (tail emitted as annotations)"
+    }
+}
+
 # Surface terminating errors as workflow annotations (visible through the API).
 trap {
 	Write-Host ("::error::FAILED: " + $_.Exception.Message)
@@ -40,18 +51,18 @@ foreach ($dep in @(
 }
 
 Write-Host '== Building the runtime (dynamic game code, unified preparation) =='
-cmake -S (Join-Path $root 'platforms\uwp-game') -B build\game `
-    -G 'Visual Studio 17 2022' -A x64 `
-    -DCMAKE_SYSTEM_NAME=WindowsStore -DCMAKE_SYSTEM_VERSION=10.0 `
-    "-DWWHD_SDL_SOURCE=$(Join-Path $art 'sdl-src')" `
-    "-DWWHD_SDL_BUILD=$(Join-Path $art 'sdl-uwp')" `
-    "-DWWHD_VULKAN_HEADERS=$(Join-Path $art 'vulkan-headers\include')" `
-    "-DWWHD_PYTHON_BUILD=$(Join-Path $art 'python-uwp')" `
-    "-DWWHD_CLANG_BUILD=$(Join-Path $art 'clang-uwp')" `
-    -DWWHD_DYNAMIC_GAMECODE=ON -DWWHD_UNIFIED_PREPARATION=ON
-if ($LASTEXITCODE -ne 0) { throw 'runtime configure failed' }
-cmake --build build\game --config Release --target wwhd-uwp-game
-if ($LASTEXITCODE -ne 0) { throw 'runtime build failed' }
+Invoke-Logged 'runtime-configure' {
+    cmake -S (Join-Path $root 'platforms\uwp-game') -B build\game `
+        -G 'Visual Studio 17 2022' -A x64 `
+        -DCMAKE_SYSTEM_NAME=WindowsStore -DCMAKE_SYSTEM_VERSION=10.0 `
+        "-DWWHD_SDL_SOURCE=$(Join-Path $art 'sdl-src')" `
+        "-DWWHD_SDL_BUILD=$(Join-Path $art 'sdl-uwp')" `
+        "-DWWHD_VULKAN_HEADERS=$(Join-Path $art 'vulkan-headers\include')" `
+        "-DWWHD_PYTHON_BUILD=$(Join-Path $art 'python-uwp')" `
+        "-DWWHD_CLANG_BUILD=$(Join-Path $art 'clang-uwp')" `
+        -DWWHD_DYNAMIC_GAMECODE=ON -DWWHD_UNIFIED_PREPARATION=ON
+}
+Invoke-Logged 'runtime-build' { cmake --build build\game --config Release --target wwhd-uwp-game }
 
 Write-Host '== Staging the package =='
 $pkg = Join-Path $root 'package'
@@ -102,8 +113,7 @@ $sdk = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Directory |
     Where-Object Name -match '^10\.' | Sort-Object Name -Descending | Select-Object -First 1
 $makeappx = Join-Path $sdk.FullName 'x64\makeappx.exe'
 $signtool = Join-Path $sdk.FullName 'x64\signtool.exe'
-& $makeappx pack /f $mapping /p "$root\wwhd-uwp-arabic-unsigned.appx" /o
-if ($LASTEXITCODE -ne 0) { throw 'MakeAppx failed' }
+Invoke-Logged 'makeappx' { & $makeappx pack /f $mapping /p "$root\wwhd-uwp-arabic-unsigned.appx" /o }
 
 Write-Host '== Signing (self-signed, CN=WWHDRecompDevelopment to match the manifest publisher) =='
 $cert = New-SelfSignedCertificate -Type Custom -Subject 'CN=WWHDRecompDevelopment' `

@@ -5,6 +5,17 @@
 #   wwhd-python.dll, python311.lib (its import library), wwhd-python-host.lib, python311.zip
 $ErrorActionPreference = 'Stop'
 
+# Runs a native build step, capturing output; on failure the last 50 lines are emitted as
+# error annotations (the readable channel when the log download is unavailable).
+function Invoke-Logged([string]$name, [scriptblock]$block) {
+    $log = Join-Path $env:RUNNER_TEMP ($name -replace '\\s+', '_') 
+    & $block 2>&1 | Tee-Object -FilePath $log
+    if ($LASTEXITCODE -ne 0) {
+        Get-Content $log -Tail 50 | ForEach-Object { Write-Host "::error::[$name] $_" }
+        throw "$name failed (tail emitted as annotations)"
+    }
+}
+
 # Surface terminating errors as workflow annotations (visible through the API).
 trap {
 	Write-Host ("::error::FAILED: " + $_.Exception.Message)
@@ -28,12 +39,12 @@ $cpython = Join-Path $root 'deps-cpython'
 $zlib = Join-Path $root 'deps-zlib'
 
 Write-Host '== Building wwhd-python (UWP) =='
-cmake -S (Join-Path $root 'platforms\uwp-python') -B build\python `
-    -G 'Visual Studio 17 2022' -A x64 `
-    "-DWWHD_PYTHON_SOURCE=$cpython" "-DWWHD_ZLIB_SOURCE=$zlib"
-if ($LASTEXITCODE -ne 0) { throw 'python configure failed' }
-cmake --build build\python --config Release --target wwhd-python wwhd-python-host
-if ($LASTEXITCODE -ne 0) { throw 'python build failed' }
+Invoke-Logged 'python-configure' {
+    cmake -S (Join-Path $root 'platforms\uwp-python') -B build\python `
+        -G 'Visual Studio 17 2022' -A x64 `
+        "-DWWHD_PYTHON_SOURCE=$cpython" "-DWWHD_ZLIB_SOURCE=$zlib"
+}
+Invoke-Logged 'python-build' { cmake --build build\python --config Release --target wwhd-python wwhd-python-host }
 
 Write-Host '== Packing the standard library (python311.zip) =='
 $excluded = @('__pycache__', 'test', 'tests', 'idlelib', 'tkinter', 'turtledemo',
