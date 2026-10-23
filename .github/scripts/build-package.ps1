@@ -12,15 +12,21 @@
 #   upstream-tools\               (ZeldaWWHDRecomp tools/ at the pinned upstream commit)
 $ErrorActionPreference = 'Stop'
 
-# Runs a native build step, capturing output; on failure the last 50 lines are emitted as
-# error annotations (the readable channel when the log download is unavailable).
+# Runs a native build step, capturing output; on failure the tail is emitted as a few packed
+# error annotations (GitHub shows only ~10 per step, and the log download is unavailable here).
 function Invoke-Logged([string]$name, [scriptblock]$block) {
-    $log = Join-Path $env:RUNNER_TEMP ($name -replace '\\s+', '_') 
+    $log = Join-Path $env:RUNNER_TEMP ("$name.log")
     & $block 2>&1 | Tee-Object -FilePath $log
     if ($LASTEXITCODE -ne 0) {
-        Get-Content $log -Tail 50 | ForEach-Object { Write-Host "::error::[$name] $_" }
-        throw "$name failed (tail emitted as annotations)"
+        $lines = @(Get-Content $log -Tail 60 | ForEach-Object { "$_" })
+        $per = 8
+        for ($start = 0; $start -lt $lines.Count; $start += $per) {
+            $chunk = $lines[$start..([Math]::Min($start + $per - 1, $lines.Count - 1))] -join ' \n '
+            Write-Host "::error::[$name] $chunk"
+        }
+        throw "$name failed (tail emitted as packed annotations)"
     }
+}
 }
 
 # Surface terminating errors as workflow annotations (visible through the API).
@@ -51,9 +57,16 @@ foreach ($dep in @(
 }
 
 Write-Host '== Building the runtime (dynamic game code, unified preparation) =='
+# Ninja + clang-cl: the runtime requires Clang (musttail support); the MSVC environment from
+# msvc-dev-cmd supplies the Windows SDK include/lib paths and the store link libraries.
+$clangCl = (Get-Command clang-cl -ErrorAction SilentlyContinue).Source
+if (-not $clangCl) { $clangCl = 'C:\Program Files\LLVM\bin\clang-cl.exe' }
+if (-not (Test-Path $clangCl)) { throw 'clang-cl not found (required: the runtime needs Clang musttail support)' }
+Write-Host "clang-cl: $clangCl"
 Invoke-Logged 'runtime-configure' {
     cmake -S (Join-Path $root 'platforms\uwp-game') -B build\game `
-        -G 'Visual Studio 17 2022' -A x64 `
+        -G Ninja -DCMAKE_BUILD_TYPE=Release `
+        "-DCMAKE_C_COMPILER=$clangCl" "-DCMAKE_CXX_COMPILER=$clangCl" `
         -DCMAKE_SYSTEM_NAME=WindowsStore -DCMAKE_SYSTEM_VERSION=10.0 `
         "-DWWHD_SDL_SOURCE=$(Join-Path $art 'sdl-src')" `
         "-DWWHD_SDL_BUILD=$(Join-Path $art 'sdl-uwp')" `
@@ -62,12 +75,13 @@ Invoke-Logged 'runtime-configure' {
         "-DWWHD_CLANG_BUILD=$(Join-Path $art 'clang-uwp')" `
         -DWWHD_DYNAMIC_GAMECODE=ON -DWWHD_UNIFIED_PREPARATION=ON
 }
-Invoke-Logged 'runtime-build' { cmake --build build\game --config Release --target wwhd-uwp-game }
+Invoke-Logged 'runtime-build' { cmake --build build\game --target wwhd-uwp-game }
 
 Write-Host '== Staging the package =='
 $pkg = Join-Path $root 'package'
 New-Item -ItemType Directory -Force -Path $pkg | Out-Null
-Copy-Item build\game\Release\wwhd-uwp-game.exe $pkg\
+$exe = Get-ChildItem build\game -Recurse -Filter wwhd-uwp-game.exe | Where-Object { $_.Directory.Name -eq $null -or $true } | Select-Object -First 1
+Copy-Item $exe.FullName $pkg\
 Copy-Item "$art\sdl-uwp\SDL3.dll" $pkg\
 Copy-Item "$art\python-uwp\wwhd-python.dll" $pkg\
 Copy-Item "$art\python-uwp\python311.zip" $pkg\

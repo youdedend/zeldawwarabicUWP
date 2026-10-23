@@ -21,6 +21,10 @@ concurrency:
   group: uwp-package-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  actions: read
+  contents: read
+
 env:
   LLVM_VERSION: 20.1.8
   CPYTHON_VERSION: v3.11.17
@@ -36,19 +40,65 @@ jobs:
   clang:
     name: LLVM/Clang 20.1.8 UWP bridge
     runs-on: windows-latest
+    outputs:
+      artifact: ${{ steps.reuse.outputs.name }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Reuse a previously built bridge (build exactly once per LLVM version + bridge sources)
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          # The finished bridge depends only on the pinned LLVM and the repo's bridge sources:
+          # key the artifact by their hashes so real changes rebuild exactly once.
+          $sources = 'platforms/uwp-clang/bridge.cpp', 'platforms/uwp-clang/memory_link.cpp', 'platforms/uwp-clang/clang_api.h'
+          $hash = -join ((Get-FileHash $sources -Algorithm SHA256 | ForEach-Object { $_.Hash.Substring(0, 8) })[0..1])
+          $name = "clang-uwp-$($env:LLVM_VERSION.Replace('.', ''))-$hash"
+          "name=$name" | Out-File $env:GITHUB_OUTPUT -Append
+          $headers = @{ Authorization = "token $env:GH_TOKEN"; Accept = 'application/vnd.github' }
+          function Find-Artifact([string]$n) {
+            $json = gh api "repos/$env:GITHUB_REPOSITORY/actions/artifacts?name=$n&per_page=100" | ConvertFrom-Json
+            $json.artifacts | Where-Object { -not $_.expired } | Sort-Object created_at -Descending | Select-Object -First 1
+          }
+          $latest = Find-Artifact $name
+          if (-not $latest) {
+            # Earlier runs published under the plain name from identical pinned sources: adopt that build.
+            $legacy = Find-Artifact 'clang-uwp'
+            if ($legacy) { $latest = $legacy; Write-Host "Adopting the legacy artifact $($legacy.id) (same pinned sources)" }
+          }
+          if ($latest) {
+            Write-Host "Found a built bridge: artifact $($latest.id) from run $($latest.run_id); skipping the LLVM build"
+            Invoke-WebRequest $latest.archive_download_url -Headers $headers -OutFile bridge-artifact.zip
+            $stage = Join-Path $env:RUNNER_TEMP 'bridge-stage'
+            Expand-Archive bridge-artifact.zip -DestinationPath $stage -Force
+            $built = Get-ChildItem $stage -Recurse -Filter wwhd-clang-bridge.dll | Select-Object -First 1
+            if (-not $built) { throw 'the reused artifact has no wwhd-clang-bridge.dll' }
+            New-Item -ItemType Directory -Force -Path artifacts/clang-uwp/bin, artifacts/clang-uwp/lib | Out-Null
+            Copy-Item $built.FullName artifacts/clang-uwp/bin/
+            $lib = Get-ChildItem $stage -Recurse -Filter wwhd-clang-bridge.lib | Select-Object -First 1
+            Copy-Item $lib.FullName artifacts/clang-uwp/lib/
+            "found=true" | Out-File $env:GITHUB_OUTPUT -Append
+          } else {
+            Write-Host "No built bridge yet ($name): building LLVM/Clang once"
+            "found=false" | Out-File $env:GITHUB_OUTPUT -Append
+          }
+
       - name: Set up the MSVC developer environment
+        if: steps.reuse.outputs.found != 'true'
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build the bridge
+        if: steps.reuse.outputs.found != 'true'
         shell: pwsh
         run: .github/scripts/build-clang-uwp.ps1
+
       - uses: actions/upload-artifact@v4
         with:
-          name: clang-uwp
+          name: ${{ steps.reuse.outputs.name }}
           path: artifacts/clang-uwp
-          retention-days: 7
+          retention-days: 90
 
   package:
     name: Runtime, Arabic mod and APPX
@@ -116,7 +166,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: clang-uwp
+          name: ${{ needs.clang.outputs.artifact }}
           path: artifacts/clang-uwp
 
       - name: Cache the runtime build tree (incremental)

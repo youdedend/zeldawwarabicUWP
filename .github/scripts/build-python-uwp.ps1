@@ -5,15 +5,21 @@
 #   wwhd-python.dll, python311.lib (its import library), wwhd-python-host.lib, python311.zip
 $ErrorActionPreference = 'Stop'
 
-# Runs a native build step, capturing output; on failure the last 50 lines are emitted as
-# error annotations (the readable channel when the log download is unavailable).
+# Runs a native build step, capturing output; on failure the tail is emitted as a few packed
+# error annotations (GitHub shows only ~10 per step, and the log download is unavailable here).
 function Invoke-Logged([string]$name, [scriptblock]$block) {
-    $log = Join-Path $env:RUNNER_TEMP ($name -replace '\\s+', '_') 
+    $log = Join-Path $env:RUNNER_TEMP ("$name.log")
     & $block 2>&1 | Tee-Object -FilePath $log
     if ($LASTEXITCODE -ne 0) {
-        Get-Content $log -Tail 50 | ForEach-Object { Write-Host "::error::[$name] $_" }
-        throw "$name failed (tail emitted as annotations)"
+        $lines = @(Get-Content $log -Tail 60 | ForEach-Object { "$_" })
+        $per = 8
+        for ($start = 0; $start -lt $lines.Count; $start += $per) {
+            $chunk = $lines[$start..([Math]::Min($start + $per - 1, $lines.Count - 1))] -join ' \n '
+            Write-Host "::error::[$name] $chunk"
+        }
+        throw "$name failed (tail emitted as packed annotations)"
     }
+}
 }
 
 # Surface terminating errors as workflow annotations (visible through the API).
@@ -39,12 +45,13 @@ $cpython = Join-Path $root 'deps-cpython'
 $zlib = Join-Path $root 'deps-zlib'
 
 Write-Host '== Building wwhd-python (UWP) =='
+# Ninja + the MSVC environment from msvc-dev-cmd: no quoted arguments, fast incremental builds.
 Invoke-Logged 'python-configure' {
     cmake -S (Join-Path $root 'platforms\uwp-python') -B build\python `
-        -G 'Visual Studio 17 2022' -A x64 `
+        -G Ninja -DCMAKE_BUILD_TYPE=Release `
         "-DWWHD_PYTHON_SOURCE=$cpython" "-DWWHD_ZLIB_SOURCE=$zlib"
 }
-Invoke-Logged 'python-build' { cmake --build build\python --config Release --target wwhd-python wwhd-python-host }
+Invoke-Logged 'python-build' { cmake --build build\python --target wwhd-python wwhd-python-host }
 
 Write-Host '== Packing the standard library (python311.zip) =='
 $excluded = @('__pycache__', 'test', 'tests', 'idlelib', 'tkinter', 'turtledemo',
