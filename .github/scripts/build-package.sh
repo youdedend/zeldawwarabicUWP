@@ -104,7 +104,11 @@ mapping=$(mktemp)
        printf '"%s\\%s" "%s"\n' "$root_win\\package" "$rel" "$rel"
    done)
 } > "$mapping"
-"$makeappx" pack /f "$mapping" /p "$root/wwhd-uwp-arabic-unsigned.appx" /o
+# MSYS auto-converts single-letter slash options to drive paths (/f -> F:/):
+# exclude these two native tools from conversion and pass Windows paths explicitly.
+mapping_win=$(cygpath -m "$mapping")
+appx_win="$root_win/wwhd-uwp-arabic-unsigned.appx"
+MSYS2_ARG_CONV_EXCL="*" "$makeappx" pack /f "$mapping_win" /p "$appx_win" /o
 
 echo '== Signing (self-signed, CN=WWHDRecompDevelopment to match the manifest publisher) =='
 powershell -NoProfile -Command "
@@ -118,7 +122,7 @@ Export-PfxCertificate -Cert \$cert -FilePath '$root_win\wwhd-uwp-arabic.pfx' -Pa
 Export-Certificate -Cert \$cert -FilePath '$root_win\wwhd-uwp-arabic.cer' | Out-Null
 "
 cp wwhd-uwp-arabic-unsigned.appx wwhd-uwp-arabic.appx
-"$signtool" sign /fd SHA256 /f "$root_win/wwhd-uwp-arabic.pfx" /p 'wwhd-uwp-arabic' "$root_win/wwhd-uwp-arabic.appx"
+MSYS2_ARG_CONV_EXCL="*" "$signtool" sign /fd SHA256 /f "$root_win/wwhd-uwp-arabic.pfx" /p 'wwhd-uwp-arabic' "$root_win/wwhd-uwp-arabic.appx"
 
 echo '== Package artifacts =='
 ls -la wwhd-uwp-arabic*
