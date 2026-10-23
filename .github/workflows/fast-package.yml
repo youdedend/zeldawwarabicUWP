@@ -1,0 +1,178 @@
+# Fast lane: build the Arabic Edition package from JYRS20's published release.
+#
+# Instead of rebuilding every component (the LLVM/Clang bridge alone takes 1-2 hours), this takes
+# the released wwhd-uwp ZIP (the packaged app), injects exactly what the Arabic integration adds,
+# and repacks and signs it in minutes:
+#
+#   1. prepare_game.py  -> the Windfall pirate door riddle bypass (applied on-console at
+#      translation time; compatible with the release's pinned upstream Tools, f10b566).
+#   2. BundledMods/content.arabic_hesham -> the SHA-256-verified Arabic translation, staged as a
+#      content mod. On the released v0.1.2 runtime the mod is enabled once in Settings > Mods
+#      (the auto-install/auto-enable needs this repo's rebuilt runtime, see the full lane);
+#      right-to-left text auto-activates when the pack's font maps >= 20 Arabic letters —
+#      arabic/verify_pack.py below prints the exact counts and the verdict into this build log.
+#
+# The released runtime keeps doing the game translation and compilation on the console from the
+# player's own USA disc; this package adds only the Arabic content and the door patch.
+name: Fast package (from upstream release)
+
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: fast-package-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UPSTREAM_RELEASE_ZIP: https://github.com/JYRS20/WWHD-UWP/releases/download/v0.1.2/wwhd-uwp-0.1.zip
+
+jobs:
+  package:
+    name: Inject the Arabic integration and repack
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Fetch, verify and stage the Arabic translation
+        shell: pwsh
+        run: |
+          python arabic/fetch_patch.py --out build/arabic
+          python arabic/stage_mod.py --zip build/arabic/Arabic.Hesham.Zelda.WW.zip --out build/arabic/staged
+          python arabic/verify_pack.py build/arabic/staged/content.arabic_hesham/content/Common/Pack/permanent_2d_UsEnglish.pack
+
+      - name: Download the released package
+        shell: pwsh
+        run: |
+          Write-Host "Downloading $env:UPSTREAM_RELEASE_ZIP"
+          Invoke-WebRequest $env:UPSTREAM_RELEASE_ZIP -OutFile released.zip
+          Expand-Archive released.zip -DestinationPath released -Force
+          Write-Host '== Released archive contents =='
+          Get-ChildItem released -Recurse | Select-Object FullName, Length
+
+      - name: Locate the package root
+        shell: pwsh
+        run: |
+          $appx = Get-ChildItem released -Recurse -Filter *.appx | Select-Object -First 1
+          if ($appx) {
+            Write-Host "Found an APPX inside: $($appx.FullName); extracting it"
+            Expand-Archive $appx.FullName -DestinationPath package -Force
+          } elseif (Get-ChildItem released -Recurse -Filter wwhd-uwp-game.exe) {
+            $exe = Get-ChildItem released -Recurse -Filter wwhd-uwp-game.exe | Select-Object -First 1
+            $root = $exe.DirectoryName
+            Write-Host "Package root is $root"
+            New-Item -ItemType Directory -Force -Path package | Out-Null
+            Copy-Item "$root\*" package -Recurse -Force
+          } else {
+            Write-Host '::error::No APPX and no wwhd-uwp-game.exe in the release archive'
+            Get-ChildItem released -Recurse -File | ForEach-Object { Write-Host $_.FullName }
+            exit 1
+          }
+          if (-not (Test-Path package\AppxManifest.xml)) {
+            Write-Host '::error::The extracted package has no AppxManifest.xml'
+            Get-ChildItem package -Recurse -File | Select-Object -First 40 | ForEach-Object { Write-Host $_.FullName }
+            exit 1
+          }
+          Write-Host '== Package root =='
+          Get-ChildItem package | Select-Object Name, Length
+
+      - name: Inject the Arabic integration
+        shell: pwsh
+        run: |
+          # 1. The door riddle bypass: the game runs prepare_game.py from the package at
+          #    preparation time; ours adds Hesham's two PPC edits and verifies them.
+          Copy-Item platforms\uwp-game\prepare_game.py package\prepare_game.py -Force
+          # 2. The Arabic translation as a bundled content mod.
+          New-Item -ItemType Directory -Force -Path package\BundledMods | Out-Null
+          Copy-Item build\arabic\staged\content.arabic_hesham package\BundledMods\content.arabic_hesham -Recurse -Force
+          # 3. The Wind Waker HD cover icon, splash screen and the app title.
+          Copy-Item platforms\uwp-game\Assets\Square150x150Logo.png package\Assets\ -Force
+          Copy-Item platforms\uwp-game\Assets\Square44x44Logo.png package\Assets\ -Force
+          Copy-Item platforms\uwp-game\Assets\StoreLogo.png package\Assets\ -Force
+          Copy-Item platforms\uwp-game\Assets\SplashScreen.png package\Assets\ -Force
+          $manifest = Get-Content package\AppxManifest.xml -Raw
+          $manifest = $manifest -replace '<DisplayName>[^<]*</DisplayName>', '<DisplayName>The Legend Of Zelda Wind Waker</DisplayName>'
+          $manifest = $manifest -replace 'DisplayName="[^"]*"', 'DisplayName="The Legend Of Zelda Wind Waker"'
+          # Each release bumps the version (the VERSION file) so the Device Portal update
+          # keeps the app's LocalState (save data, prepared game profiles).
+          $version = (Get-Content VERSION -Raw).Trim()
+          # NOTE the ${1}/${2} braces: without them '$1' + '0.1.3' would form '$10',
+          # which .NET regex reads as group 10 (empty) - the version became '.1.3.0'.
+          $manifest = $manifest -replace '(<Identity[^>]*Version=")[^"]*(")', ('${1}' + $version + '.0${2}')
+          if ($manifest -notmatch ('Version="' + [regex]::Escape($version) + '\.0"')) { throw "the version bump to $version did not apply" }
+          Write-Host "::notice::[fast] packaged identity: $(($manifest | Select-String '<Identity[^>]*/>').Matches.Value)"
+          Set-Content package\AppxManifest.xml $manifest -Encoding UTF8
+          Write-Host '== Manifest identity =='
+          ($manifest | Select-String '<Identity[^>]*/>').Matches.Value
+          Write-Host '== Injected files =='
+          Get-Item package\prepare_game.py, package\BundledMods\content.arabic_hesham\manifest.json | Select-Object FullName, Length
+          Get-ChildItem package\BundledMods -Recurse -File | ForEach-Object { Write-Host "  $($_.FullName.Substring($PWD.Path.Length + 8)) ($($_.Length) bytes)" }
+
+      - name: Pack and sign the APPX
+        shell: pwsh
+        run: |
+          $sdk = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Directory |
+            Where-Object Name -match '^10\.' | Sort-Object Name -Descending | Select-Object -First 1
+          $makeappx = Join-Path $sdk.FullName 'x64\makeappx.exe'
+          $signtool = Join-Path $sdk.FullName 'x64\signtool.exe'
+          & $makeappx pack /d package /p wwhd-uwp-arabic-fast.appx /o
+          if ($LASTEXITCODE -ne 0) { throw 'MakeAppx failed' }
+          $cert = New-SelfSignedCertificate -Type Custom -Subject 'CN=WWHDRecompDevelopment' `
+            -KeyUsage DigitalSignature -FriendlyName 'WWHD UWP Arabic Edition (fast)' `
+            -KeyExportPolicy Exportable -KeySpec Signature -KeyLength 2048 `
+            -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddYears(5)
+          $password = ConvertTo-SecureString -String 'wwhd-uwp-arabic' -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath wwhd-uwp-arabic-fast.pfx -Password $password | Out-Null
+          Export-Certificate -Cert $cert -FilePath wwhd-uwp-arabic-fast.cer | Out-Null
+          & $signtool sign /fd SHA256 /f wwhd-uwp-arabic-fast.pfx /p 'wwhd-uwp-arabic' wwhd-uwp-arabic-fast.appx
+          if ($LASTEXITCODE -ne 0) { throw 'signtool failed' }
+          Compress-Archive -Path build/arabic/staged/content.arabic_hesham -DestinationPath Arabic-Hesham-mod.zip -Force
+          Get-ChildItem wwhd-uwp-arabic-fast.*, Arabic-Hesham-mod.zip | Select-Object Name, Length
+          Write-Host 'PASS fast package'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wwhd-uwp-arabic-fast-appx
+          path: |
+            wwhd-uwp-arabic-fast.appx
+            wwhd-uwp-arabic-fast.pfx
+            wwhd-uwp-arabic-fast.cer
+            Arabic-Hesham-mod.zip
+          retention-days: 14
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish the package to Releases
+    runs-on: ubuntu-latest
+    needs: package
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wwhd-uwp-arabic-fast-appx
+          path: assets
+
+      - name: Create or refresh the release with the package attached
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES_FILE: .github/release-notes-arabic.md
+          ASSETS_DIR: assets
+          RENAME_FROM: wwhd-uwp-arabic-fast.appx wwhd-uwp-arabic-fast.pfx wwhd-uwp-arabic-fast.cer
+          RENAME_TO: wwhd-uwp-arabic.appx wwhd-uwp-arabic.pfx wwhd-uwp-arabic.cer
+        run: |
+          VERSION=$(tr -d '[:space:]' < VERSION)
+          export RELEASE_TAG="arabic-v${VERSION}"
+          export RELEASE_TITLE="WWHD-UWP Arabic Edition v${VERSION}"
+          bash .github/scripts/publish-release.sh wwhd-uwp-arabic.appx wwhd-uwp-arabic.pfx wwhd-uwp-arabic.cer Arabic-Hesham-mod.zip

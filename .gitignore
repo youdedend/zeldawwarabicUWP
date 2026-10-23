@@ -1,0 +1,8 @@
+# Private game-derived artifacts and build outputs stay out of Git (upstream convention).
+/.local/
+/build/
+Mods/
+# The staged Arabic translation (downloaded and staged by arabic/fetch_patch.py + stage_mod.py)
+/arabic/build/
+__pycache__/
+*.pyc

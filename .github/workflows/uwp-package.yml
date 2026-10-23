@@ -1,0 +1,242 @@
+# Builds the WWHD-UWP Arabic Edition APPX on GitHub's Windows runners.
+#
+# Two jobs: the LLVM/Clang UWP bridge (the long pole, built alone) in parallel with the SDL,
+# CPython-UWP, Mesa driver and translation staging; then the runtime is built against all of it
+# and packaged with MakeAppx (unsigned + self-signed). No game assets, keys or derived files are
+# needed: the unified package prepares and compiles the game on the console from the player's own
+# USA disc image. The Arabic translation is fetched from Arabic Hesham's official release and
+# SHA-256-verified by arabic/fetch_patch.py before it is staged into the package.
+#
+# The self-signed APPX installs through the Xbox Device Portal after importing wwhd-uwp-arabic.cer
+# on the console; the unsigned APPX is for re-signing with your own certificate.
+name: UWP package (Arabic Edition)
+
+on:
+  push:
+    branches: [main, 'arena/**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: uwp-package-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  UPSTREAM_RELEASE_ZIP: https://github.com/JYRS20/WWHD-UWP/releases/download/v0.1.2/wwhd-uwp-0.1.zip
+  LLVM_VERSION: 20.1.8
+  CPYTHON_VERSION: v3.11.17
+  ZLIB_VERSION: 1.3.1
+  ZLIB_TAG: 1.3.1
+  VULKAN_HEADERS_VERSION: v1.3.290
+  GLSLANG_TAG: 15.1.0
+  MESA_UWP_RELEASE: alpha-2
+  MESA_UWP_ASSET: alpha-2.zip
+  UPSTREAM_REF: f10b56621ed13e0053e7cf8190e740834377e45a
+
+jobs:
+  clang:
+    name: LLVM/Clang 20.1.8 UWP bridge
+    runs-on: windows-latest
+    outputs:
+      artifact: ${{ steps.reuse.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reuse a previously built bridge (build exactly once per LLVM version + bridge sources)
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          # The finished bridge depends only on the pinned LLVM and the repo's bridge sources:
+          # key the artifact by their hashes so real changes rebuild exactly once.
+          $sources = 'platforms/uwp-clang/bridge.cpp', 'platforms/uwp-clang/memory_link.cpp', 'platforms/uwp-clang/clang_api.h'
+          $hash = -join ((Get-FileHash $sources -Algorithm SHA256 | ForEach-Object { $_.Hash.Substring(0, 8) })[0..1])
+          $name = "clang-uwp-$($env:LLVM_VERSION.Replace('.', ''))-$hash"
+          "name=$name" | Out-File $env:GITHUB_OUTPUT -Append
+          $headers = @{ Authorization = "token $env:GH_TOKEN"; Accept = 'application/vnd.github' }
+          function Find-Artifact([string]$n) {
+            $json = gh api "repos/$env:GITHUB_REPOSITORY/actions/artifacts?name=$n&per_page=100" | ConvertFrom-Json
+            $json.artifacts | Where-Object { -not $_.expired } | Sort-Object created_at -Descending | Select-Object -First 1
+          }
+          $latest = Find-Artifact $name
+          if (-not $latest) {
+            # Earlier runs published under the plain name from identical pinned sources: adopt that build.
+            $legacy = Find-Artifact 'clang-uwp'
+            if ($legacy) { $latest = $legacy; Write-Host "Adopting the legacy artifact $($legacy.id) (same pinned sources)" }
+          }
+          if ($latest) {
+            Write-Host "Found a built bridge: artifact $($latest.id) from run $($latest.run_id); skipping the LLVM build"
+            Invoke-WebRequest $latest.archive_download_url -Headers $headers -OutFile bridge-artifact.zip
+            $stage = Join-Path $env:RUNNER_TEMP 'bridge-stage'
+            Expand-Archive bridge-artifact.zip -DestinationPath $stage -Force
+            $built = Get-ChildItem $stage -Recurse -Filter wwhd-clang-bridge.dll | Select-Object -First 1
+            if (-not $built) { throw 'the reused artifact has no wwhd-clang-bridge.dll' }
+            New-Item -ItemType Directory -Force -Path artifacts/clang-uwp/bin, artifacts/clang-uwp/lib | Out-Null
+            Copy-Item $built.FullName artifacts/clang-uwp/bin/
+            $lib = Get-ChildItem $stage -Recurse -Filter wwhd-clang-bridge.lib | Select-Object -First 1
+            Copy-Item $lib.FullName artifacts/clang-uwp/lib/
+            "found=true" | Out-File $env:GITHUB_OUTPUT -Append
+          } else {
+            Write-Host "No built bridge yet ($name): building LLVM/Clang once"
+            "found=false" | Out-File $env:GITHUB_OUTPUT -Append
+          }
+
+      - name: Set up the MSVC developer environment
+        if: steps.reuse.outputs.found != 'true'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build the bridge
+        if: steps.reuse.outputs.found != 'true'
+        shell: pwsh
+        run: .github/scripts/build-clang-uwp.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.reuse.outputs.name }}
+          path: artifacts/clang-uwp
+          retention-days: 90
+
+  deepfreeze:
+    name: CPython deepfreeze.c (generated)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate CPython's deepfreeze.c (host-independent C; the Windows tree lacks it)
+        run: |
+          set -e
+          curl -sL -o cpython.tar.gz "https://codeload.github.com/python/cpython/tar.gz/refs/tags/${CPYTHON_VERSION}"
+          tar -xzf cpython.tar.gz
+          cd "cpython-${CPYTHON_VERSION#v}"
+          ./configure > /dev/null
+          make -j2 > /dev/null
+          ls -la Python/deepfreeze/deepfreeze.c
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpython-deepfreeze
+          path: cpython-3.11.17/Python/deepfreeze/deepfreeze.c
+          retention-days: 90
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cpython-getpath-h
+          path: cpython-3.11.17/Python/frozen_modules/getpath.h
+          retention-days: 90
+          if-no-files-found: error
+
+  package:
+    name: Runtime, Arabic mod and APPX
+    # windows-2022 ships VS 2022: CPython 3.11 predates the VS 18-only windows-latest image.
+    runs-on: windows-2022
+    needs: [clang, deepfreeze]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Fetch and verify the Arabic translation, stage the bundled mod
+        shell: pwsh
+        run: |
+          python arabic/fetch_patch.py --out build/arabic
+          python arabic/stage_mod.py --zip build/arabic/Arabic.Hesham.Zelda.WW.zip --out .local/arabic/staged
+          Copy-Item .local/arabic/staged/content.arabic_hesham .local/arabic/content.arabic_hesham -Recurse
+          python arabic/verify_pack.py .local/arabic/content.arabic_hesham/content/Common/Pack/permanent_2d_UsEnglish.pack
+
+      - name: Download the released SDL3.dll (the proven UWP binary)
+        shell: bash
+        run: bash .github/scripts/fetch-released-sdl3.sh
+
+      - name: Download the pinned upstream ZeldaWWHDRecomp tooling
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://codeload.github.com/ZeldaWWHDRecomp/ZeldaWWHDRecomp/tar.gz/$env:UPSTREAM_REF" -OutFile upstream.tar.gz
+          tar -xzf upstream.tar.gz
+          # codeload names the directory after the exact ref (the full SHA here): resolve it.
+          $upstream = Get-ChildItem -Directory -Filter 'ZeldaWWHDRecomp-*' | Select-Object -First 1
+          if (-not $upstream) { throw 'upstream tarball did not extract as expected' }
+          Move-Item $upstream.FullName upstream
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Move-Item upstream/tools artifacts/upstream-tools
+          Get-ChildItem artifacts/upstream-tools | Select-Object Name
+
+      - name: Set up the MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Cache the SDL3 UWP build (incremental)
+        uses: actions/cache@v4
+        with:
+          path: |
+            sdl-src
+            build/sdl
+          key: sdl-uwp-v1-${{ github.run_id }}
+          restore-keys: sdl-uwp-v1-
+      - name: Build SDL3 UWP
+        shell: bash
+        run: bash .github/scripts/build-sdl-uwp.sh
+
+      - name: Cache the CPython UWP build (incremental)
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps-cpython
+            deps-zlib
+            build/python
+          key: cpython-uwp-v1-${{ github.run_id }}
+          restore-keys: cpython-uwp-v1-
+      - uses: actions/download-artifact@v4
+        with:
+          name: cpython-deepfreeze
+          path: artifacts/cpython-deepfreeze
+      - uses: actions/download-artifact@v4
+        with:
+          name: cpython-getpath-h
+          path: artifacts/cpython-getpath-h
+      - name: Build CPython UWP
+        shell: bash
+        env:
+          DEEPFREEZE_C: ${{ github.workspace }}/artifacts/cpython-deepfreeze/deepfreeze.c
+          GETPATH_H: ${{ github.workspace }}/artifacts/cpython-getpath-h/getpath.h
+        run: bash .github/scripts/build-python-uwp.sh
+
+      - name: Fetch the Mesa Dozen UWP driver
+        shell: pwsh
+        run: .github/scripts/fetch-mesa-uwp.ps1
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.clang.outputs.artifact }}
+          path: artifacts/clang-uwp
+
+      - name: Cache the runtime build tree (incremental)
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/game
+            .local/host-tools
+          key: runtime-uwp-v1-${{ github.run_id }}
+          restore-keys: runtime-uwp-v1-
+      - name: Build the runtime and package the APPX
+        shell: bash
+        run: bash .github/scripts/build-package.sh
+
+      - name: Report the on-console preparation path
+        shell: pwsh
+        run: |
+          Write-Host "Arabic mod files in the package:"
+          Get-ChildItem package/BundledMods -Recurse -File | ForEach-Object { Write-Host "  $($_.FullName.Substring($PWD.Path.Length + 8)) ($($_.Length) bytes)" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wwhd-uwp-arabic-appx
+          path: |
+            wwhd-uwp-arabic.appx
+            wwhd-uwp-arabic-unsigned.appx
+            wwhd-uwp-arabic.pfx
+            wwhd-uwp-arabic.cer
+          retention-days: 14
+          if-no-files-found: error
